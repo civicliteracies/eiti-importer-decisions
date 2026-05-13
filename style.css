@@ -453,6 +453,15 @@ body.show-technical .fields dd.field-technical {
 }
 .site-footer p { margin: 0.3rem 0; }
 
+.site-footer-logo {
+  display: inline-block;
+  margin-bottom: 0.9rem;
+  opacity: 0.6;
+  transition: opacity 150ms;
+}
+.site-footer-logo:hover { opacity: 1; }
+.site-footer-logo img { display: block; height: 1.6rem; width: auto; }
+
 /* === Mobile === */
 
 @media (max-width: 900px) {
