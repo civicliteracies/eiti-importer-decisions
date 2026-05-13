@@ -1,23 +1,24 @@
 /* === Tokens === */
 
 :root {
-  --fg: #1a1a17;
-  --fg-muted: #4a4842;
-  --fg-subtle: #8a8780;
-  --bg: #fdfdfb;
-  --bg-soft: #f5f2eb;
+  --fg: #15171c;
+  --fg-muted: #474b56;
+  --fg-subtle: #7c8089;
+  --bg: #fbfcfd;
+  --bg-soft: #eef2f6;
   --bg-elevated: #ffffff;
-  --accent: #7a4e2e;
-  --accent-soft: #f1e6d4;
-  --pending: #b14d1f;
-  --pending-bg: #fdf3e7;
-  --pending-rule: #e9c8a1;
-  --rule: #e0dcd2;
-  --rule-soft: #ecebe5;
-  --code-fg: #5a3826;
-  --code-bg: #f1ecdf;
-  --code-border: #ddd6c2;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --accent: #132856;         /* EITI navy */
+  --accent-soft: #e4ebf4;
+  --pending: #b87a0e;         /* EITI gold, darkened for legibility on light bg */
+  --pending-accent: #F6A70A;  /* the literal EITI gold, used on lines/borders */
+  --pending-bg: #fdf3d2;
+  --pending-rule: #f0c862;
+  --rule: #d8dee8;
+  --rule-soft: #e6ebf1;
+  --code-fg: #132856;
+  --code-bg: #eef2f6;
+  --code-border: #d4dae4;
+  --shadow: 0 1px 2px rgba(19, 40, 86, 0.06);
   --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --serif: ui-serif, Georgia, Cambria, "Times New Roman", serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -147,7 +148,7 @@ a:hover { text-decoration-color: currentColor; }
 
 .tab[data-tab="pending"][aria-selected="true"] {
   color: var(--pending);
-  border-bottom-color: var(--pending);
+  border-bottom-color: var(--pending-accent);
 }
 
 .badge {
