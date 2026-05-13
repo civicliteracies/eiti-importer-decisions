@@ -36,11 +36,18 @@
         Pending<span class="badge" id="pending-count" hidden></span>
       </a>
     </nav>
+    <div class="view-controls" id="view-controls">
+      <span class="view-label">Group by</span>
+      <div class="view-toggle" role="radiogroup" aria-label="Grouping">
+        <button type="button" data-view="topic" role="radio" aria-checked="true" class="is-active">Topic</button>
+        <button type="button" data-view="jtbd" role="radio" aria-checked="false">Job</button>
+      </div>
+    </div>
   </header>
 
   <div class="layout">
-    <nav id="toc" class="toc" aria-label="Topics">
-      <p class="toc-title">Topics</p>
+    <nav id="toc" class="toc" aria-label="Sections">
+      <p class="toc-title" id="toc-title">Topics</p>
       <ol id="toc-list"></ol>
     </nav>
 

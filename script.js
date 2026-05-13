@@ -4,6 +4,57 @@
   const THEMES = ['system', 'light', 'dark'];
   const THEME_LABELS = { system: 'Auto', light: 'Light', dark: 'Dark' };
 
+  const TOPIC_ORDER = [
+    'data-quality-policy',
+    'currency-financial-calculations',
+    'workflow-status',
+    'template-recognition',
+    'entity-resolution',
+    'consistency-rules',
+    'import-behavior',
+    'version-differences',
+    'cross-cutting',
+  ];
+
+  const TOPIC_LABELS = {
+    'data-quality-policy': '1. Data Quality Policy',
+    'currency-financial-calculations': '2. Currency & Financial Calculations',
+    'workflow-status': '3. Workflow & Status',
+    'template-recognition': '4. Template Recognition',
+    'entity-resolution': '5. Entity Resolution',
+    'consistency-rules': '6. Consistency Rules',
+    'import-behavior': '7. Import Behavior',
+    'version-differences': '8. Version Differences',
+    'cross-cutting': 'Cross-Cutting',
+  };
+
+  const JTBD_ORDER = [
+    'submit-a-report',
+    'trust-the-data',
+    'fix-problems-before-import',
+    'reconcile-government-vs-companies',
+    'avoid-duplicate-imports',
+    'audit-who-did-what',
+    'compare-across-versions',
+    'operate-at-scale',
+    'cross-cutting',
+  ];
+
+  const JTBD_LABELS = {
+    'submit-a-report': 'Submit a report',
+    'trust-the-data': 'Trust the data',
+    'fix-problems-before-import': 'Fix problems before import',
+    'reconcile-government-vs-companies': 'Reconcile government vs companies',
+    'avoid-duplicate-imports': 'Avoid duplicate imports',
+    'audit-who-did-what': 'Audit who did what',
+    'compare-across-versions': 'Compare across versions',
+    'operate-at-scale': 'Operate at scale',
+    'cross-cutting': 'Cross-cutting',
+  };
+
+  // Module state
+  let entries = [];
+
   // === Theme ===
 
   function applyTheme(t) {
@@ -15,7 +66,7 @@
   }
 
   function cycleTheme() {
-    const cur = localStorage.getItem('theme') || 'system';
+    const cur = (() => { try { return localStorage.getItem('theme'); } catch { return null; } })() || 'system';
     const idx = THEMES.indexOf(cur);
     applyTheme(THEMES[(idx + 1) % THEMES.length]);
   }
@@ -36,10 +87,8 @@
   function applyTab(tab) {
     document.body.dataset.tab = tab;
     document.querySelectorAll('.tab').forEach((a) => {
-      const on = a.dataset.tab === tab;
-      a.setAttribute('aria-selected', on ? 'true' : 'false');
+      a.setAttribute('aria-selected', a.dataset.tab === tab ? 'true' : 'false');
     });
-    // After switching tabs, scroll to top of content (unless a sub-hash is set)
     if (!location.hash.includes('#section-') && !location.hash.includes('#entry-')) {
       window.scrollTo({ top: 0, behavior: 'auto' });
     }
@@ -48,6 +97,37 @@
   function initTabs() {
     applyTab(currentTab());
     window.addEventListener('hashchange', () => applyTab(currentTab()));
+  }
+
+  // === Group-by toggle ===
+
+  function currentView() {
+    try { return localStorage.getItem('group-by') === 'jtbd' ? 'jtbd' : 'topic'; }
+    catch { return 'topic'; }
+  }
+
+  function applyView(v) {
+    if (v !== 'topic' && v !== 'jtbd') v = 'topic';
+    try { localStorage.setItem('group-by', v); } catch {}
+    document.querySelectorAll('.view-toggle button').forEach((b) => {
+      const on = b.dataset.view === v;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    const tocTitle = document.getElementById('toc-title');
+    if (tocTitle) tocTitle.textContent = v === 'jtbd' ? 'Jobs' : 'Topics';
+    if (entries.length > 0) {
+      renderDecidedView(v);
+      buildToc();
+      setupScrollSpy();
+    }
+  }
+
+  function initViewToggle() {
+    applyView(currentView());
+    document.querySelectorAll('.view-toggle button').forEach((b) => {
+      b.addEventListener('click', () => applyView(b.dataset.view));
+    });
   }
 
   // === Markdown loading ===
@@ -70,15 +150,15 @@
     main.removeAttribute('aria-busy');
 
     hideIntro(main);
+    attachMetadata(main); // before splitIntoSections, while comments are still adjacent to h3
     splitIntoSections(main);
     structureFields(main);
-    buildToc();
-    setupScrollSpy();
-    updateLastModified();
+    entries = collectEntries(main);
+    applyView(currentView()); // re-renders decided-view, builds toc, scroll spy
     updatePendingBadge();
+    updateLastModified();
   }
 
-  // Hide markdown's own h1 and the intro paragraphs.
   function hideIntro(main) {
     const firstH2 = main.querySelector('h2');
     if (!firstH2) return;
@@ -89,7 +169,6 @@
     }
   }
 
-  // Wrap section 0 in .pending-view and the rest in .decided-view.
   function splitIntoSections(main) {
     const h2s = [...main.querySelectorAll('h2')];
     if (h2s.length === 0) return;
@@ -97,9 +176,8 @@
     const pendingH2 = h2s.find((h) => /^\s*0\./.test(h.textContent));
     const otherH2s = h2s.filter((h) => h !== pendingH2);
 
-    // Build wrappers
-    const pendingWrap = pendingH2 ? document.createElement('section') : null;
-    if (pendingWrap) {
+    if (pendingH2) {
+      const pendingWrap = document.createElement('section');
       pendingWrap.className = 'pending-view';
       pendingH2.parentNode.insertBefore(pendingWrap, pendingH2);
       collectUntilNextH2(pendingH2, pendingWrap);
@@ -109,26 +187,21 @@
       const decidedWrap = document.createElement('section');
       decidedWrap.className = 'decided-view';
       otherH2s[0].parentNode.insertBefore(decidedWrap, otherH2s[0]);
-      // Move all remaining h2 blocks into decidedWrap
       let next = otherH2s[0];
       while (next) {
-        const after = nextH2(next);
+        const after = findNextH2(next);
         collectUntilNextH2(next, decidedWrap);
         next = after;
       }
-      // Mark the first decided h2 as "is-first" so it doesn't draw a border above
-      const firstH2 = decidedWrap.querySelector('h2');
-      if (firstH2) firstH2.classList.add('is-first');
     }
   }
 
-  function nextH2(node) {
+  function findNextH2(node) {
     let n = node.nextElementSibling;
     while (n && n.tagName !== 'H2') n = n.nextElementSibling;
     return n;
   }
 
-  // Move node and all following siblings up to (but excluding) the next h2 into target.
   function collectUntilNextH2(startH2, target) {
     const blocks = [startH2];
     let n = startH2.nextElementSibling;
@@ -140,10 +213,6 @@
   }
 
   // === Field structuring ===
-  // Each `### entry` has labelled paragraphs (Situation/Decision/etc.). Convert
-  // them into a <dl class="fields"> with the label as <dt>, body as <dd>.
-  // Handles both source styles: blank-line-separated paragraphs and collapsed
-  // paragraphs that contain multiple "<strong>Label:</strong>" markers.
 
   function structureFields(root) {
     const h3s = [...root.querySelectorAll('h3')];
@@ -155,10 +224,6 @@
         n = n.nextElementSibling;
       }
 
-      // Determine field-start positions inside each block.
-      // A field-start is a <p> whose innerHTML starts with <strong>Word(s):</strong>.
-      // Build a sequence of items: either { field, label, intro:<DocumentFragment> }
-      // or { extra:<Element> } that belong to the previous field.
       const items = [];
       for (const block of blocks) {
         if (block.tagName === 'P' && /^<strong>[^:<]+:<\/strong>/.test(block.innerHTML.trim())) {
@@ -172,14 +237,12 @@
             p.innerHTML = seg.body;
             items.push({ field: true, label: seg.label, content: [p] });
           }
-          // Remove the original block — its content is now in the items
           block.remove();
         } else {
           items.push({ extra: block });
         }
       }
 
-      // Assemble fields and trailing extras
       const fields = [];
       let cur = null;
       for (const it of items) {
@@ -193,7 +256,6 @@
 
       if (fields.length === 0) continue;
 
-      // Build the dl
       const dl = document.createElement('dl');
       dl.className = 'fields';
       for (const f of fields) {
@@ -222,20 +284,89 @@
     });
   }
 
-  // === TOC + scroll spy ===
+  // === Metadata extraction (must run before structureFields) ===
 
-  function slugify(text) {
-    return text.toLowerCase().replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-');
+  function attachMetadata(main) {
+    for (const h3 of main.querySelectorAll('h3')) {
+      let n = h3.nextSibling;
+      while (n && n.nodeType !== Node.ELEMENT_NODE) {
+        if (n.nodeType === Node.COMMENT_NODE) {
+          const m = /jtbd\s*:\s*([\w-]+)\s*;\s*topic\s*:\s*([\w-]+)/.exec(n.data);
+          if (m) {
+            h3.dataset.jtbd = m[1];
+            h3.dataset.topic = m[2];
+            const toRemove = n;
+            n = n.nextSibling;
+            toRemove.remove();
+            break;
+          }
+        }
+        n = n.nextSibling;
+      }
+    }
   }
+
+  function collectEntries(main) {
+    const list = [];
+    const decided = main.querySelector('.decided-view');
+    if (!decided) return list;
+    for (const h3 of decided.querySelectorAll('h3')) {
+      const { jtbd, topic } = h3.dataset;
+      if (!jtbd || !topic) continue;
+      const dl =
+        h3.nextElementSibling && h3.nextElementSibling.tagName === 'DL'
+          ? h3.nextElementSibling
+          : null;
+      list.push({ title: h3.textContent, h3, dl, jtbd, topic });
+    }
+    return list;
+  }
+
+  // === View rendering (group by topic or jtbd) ===
+
+  function renderDecidedView(view) {
+    const decided = document.querySelector('.decided-view');
+    if (!decided) return;
+    const order = view === 'jtbd' ? JTBD_ORDER : TOPIC_ORDER;
+    const labels = view === 'jtbd' ? JTBD_LABELS : TOPIC_LABELS;
+
+    const groups = new Map(order.map((k) => [k, []]));
+    for (const e of entries) {
+      const key = e[view] || 'cross-cutting';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(e);
+    }
+
+    decided.innerHTML = '';
+    let first = true;
+    for (const k of order) {
+      const items = groups.get(k);
+      if (!items || items.length === 0) continue;
+      const h2 = document.createElement('h2');
+      h2.id = `section-${k}`;
+      h2.textContent = labels[k] || k;
+      if (first) {
+        h2.classList.add('is-first');
+        first = false;
+      }
+      decided.appendChild(h2);
+      for (const e of items) {
+        decided.appendChild(e.h3);
+        if (e.dl) decided.appendChild(e.dl);
+      }
+    }
+  }
+
+  // === TOC + scroll spy ===
 
   function buildToc() {
     const list = document.getElementById('toc-list');
+    if (!list) return;
     list.innerHTML = '';
     const decided = document.querySelector('.decided-view');
     if (!decided) return;
     const headings = [...decided.querySelectorAll('h2')];
-    headings.forEach((h, i) => {
-      if (!h.id) h.id = `section-${slugify(h.textContent) || i}`;
+    headings.forEach((h) => {
       const li = document.createElement('li');
       const a = document.createElement('a');
       a.href = `#${h.id}`;
@@ -245,15 +376,21 @@
     });
   }
 
+  let activeObserver = null;
+
   function setupScrollSpy() {
+    if (activeObserver) {
+      activeObserver.disconnect();
+      activeObserver = null;
+    }
     const links = [...document.querySelectorAll('#toc-list a')];
     const byId = new Map(links.map((a) => [a.getAttribute('href').slice(1), a]));
     const headings = [...document.querySelectorAll('.decided-view h2')];
     if (headings.length === 0) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting);
+    activeObserver = new IntersectionObserver(
+      (intersections) => {
+        const visible = intersections.filter((e) => e.isIntersecting);
         if (visible.length === 0) return;
         visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
         links.forEach((a) => a.classList.remove('is-active'));
@@ -262,7 +399,7 @@
       },
       { rootMargin: '-25% 0px -65% 0px', threshold: 0 }
     );
-    headings.forEach((h) => observer.observe(h));
+    headings.forEach((h) => activeObserver.observe(h));
   }
 
   function updatePendingBadge() {
@@ -288,5 +425,6 @@
 
   initTheme();
   initTabs();
+  initViewToggle();
   loadAndRender();
 })();
