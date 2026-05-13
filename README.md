@@ -1,7 +1,7 @@
 # EITI Data Importer — Decision Log
 
 Public mirror of the decision log for the EITI Data Importer project. The site
-at [civicliteracies.github.io/eiti-importer-decisions](https://civicliteracies.github.io/eiti-importer-decisions)
+at [civicliteraci.es/eiti-importer-decisions](https://civicliteraci.es/eiti-importer-decisions/)
 renders [`decision-log.md`](./decision-log.md) as a categorized, navigable
 reference.
 
