@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EITI Data Importer — Decision Log</title>
+  <meta name="description" content="How the EITI Data Importer handles data, organized by topic. A mirror of the project's decision log.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <p class="eyebrow">EITI Data Importer</p>
+    <h1>Decision Log</h1>
+    <p class="lede">How the importer handles data, organized by topic. Each entry documents a choice that affects what the tool does with submitted files.</p>
+    <p class="meta" id="updated"></p>
+  </header>
+
+  <div class="layout">
+    <nav id="toc" aria-label="Categories">
+      <p class="toc-title">Categories</p>
+      <ol id="toc-list"></ol>
+    </nav>
+
+    <main id="content" aria-busy="true">
+      <p class="loading">Loading decision log…</p>
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <p>Mirrored from the source repository. The decision log is the source of truth for how the importer handles data.</p>
+    <p><a href="https://github.com/civicliteracies/eiti-importer-decisions">View source on GitHub</a></p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js" defer></script>
+  <script src="script.js" defer></script>
+</body>
+</html>
