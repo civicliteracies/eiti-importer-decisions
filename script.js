@@ -409,11 +409,25 @@
   function updatePendingBadge() {
     const pendingEntries = document.querySelectorAll('.pending-view h3').length;
     const badge = document.getElementById('pending-count');
-    if (!badge) return;
-    if (pendingEntries > 0) {
+    if (badge && pendingEntries > 0) {
       badge.textContent = String(pendingEntries);
       badge.hidden = false;
     }
+    const decidedEntries = document.querySelectorAll('.decided-view h3').length;
+    const decidedBadge = document.getElementById('decided-count');
+    if (decidedBadge && decidedEntries > 0) {
+      decidedBadge.textContent = String(decidedEntries);
+      decidedBadge.hidden = false;
+    }
+  }
+
+  function initBackToTop() {
+    const btn = document.getElementById('back-to-top');
+    if (!btn) return;
+    btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    const update = () => { btn.hidden = window.scrollY < 400; };
+    window.addEventListener('scroll', update, { passive: true });
+    update();
   }
 
   function updateLastModified() {
@@ -430,5 +444,6 @@
   initTabs();
   initViewToggle();
   initTechToggle();
+  initBackToTop();
   loadAndRender();
 })();

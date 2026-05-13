@@ -12,13 +12,15 @@
     <div class="site-header-inner">
       <p class="eyebrow">EITI Data Importer</p>
       <h1>Decision Log</h1>
-      <p class="lede">How the importer handles data. A reference for stakeholder discussions, updated automatically from the source repository.</p>
+      <p class="lede">Reference documentation of the decisions taken by CLI as part of the development of the importer. Updated automatically from the source repository.</p>
     </div>
   </header>
 
   <div class="control-strip">
     <nav class="tabs" role="tablist" aria-label="Decision view">
-      <a href="#/decided" class="tab" role="tab" data-tab="decided" aria-selected="true">Decided</a>
+      <a href="#/decided" class="tab" role="tab" data-tab="decided" aria-selected="true">
+        Decided<span class="badge badge-muted" id="decided-count" hidden></span>
+      </a>
       <a href="#/pending" class="tab" role="tab" data-tab="pending" aria-selected="false">
         Pending<span class="badge" id="pending-count" hidden></span>
       </a>
@@ -49,6 +51,8 @@
       <p class="loading">Loading decision log…</p>
     </main>
   </div>
+
+  <button id="back-to-top" type="button" class="back-to-top" aria-label="Back to top" hidden>↑ Top</button>
 
   <footer class="site-footer">
     <p>Mirrored from <a href="https://github.com/civicliteracies/eiti-importer-decisions">civicliteracies/eiti-importer-decisions</a>. Released under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</p>
