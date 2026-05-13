@@ -8,8 +8,8 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 ## 0. Pending Decisions
 
-### v2.1 / v2.0 company-revenue Sector column — VLOOKUP misalignment
-<!-- jtbd: trust-the-data; topic: pending-decisions -->
+### Why are v2.x sector values unreliable?
+<!-- scenario: trust-the-data; topic: pending-decisions -->
 
 **Question:** Should `sector` on company revenue rows (v2.x Part 5 / Gov_revs_comp_proj) be typed as `Sector | NotAvailable` and validated against the `Sector` enum, or remain `str | NotAvailable` (validation suspended)?
 
@@ -27,35 +27,35 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 ## 1. Data Quality Policy
 
-### Fixable vs source-only error classification
-<!-- jtbd: fix-problems-before-import; topic: data-quality-policy -->
+### What kinds of errors can be fixed in the tool?
+<!-- scenario: fix-problems-before-import; topic: data-quality-policy -->
 
 **Situation:** A validation error is found in parsed data.
 
 **Decision:** Errors with correction candidates (dropdown options) or a proposed value (auto-fix) are "fixable" in the review UI. Errors with neither are "source-only" — the submitter must fix the source Excel file.
 
-**Rationale:** Operators need to distinguish between errors they can resolve in the tool and errors that require the data submitter to re-export.
+**Rationale:** Users need to distinguish between errors they can resolve in the tool and errors that require the data submitter to re-export.
 
-### Source-only errors block import
-<!-- jtbd: trust-the-data; topic: data-quality-policy -->
+### When does an error block import?
+<!-- scenario: trust-the-data; topic: data-quality-policy -->
 
 **Situation:** The dashboard displays a status after validation.
 
-**Decision:** If any source-only error exists, status is BLOCKED. The operator cannot proceed to import.
+**Decision:** If any source-only error exists, status is BLOCKED. The user cannot proceed to import.
 
 **Rationale:** Source-only errors cannot be resolved in the tool. Importing data with them would produce a corrupted dataset.
 
-### Crosscheck findings trigger review
-<!-- jtbd: trust-the-data; topic: data-quality-policy -->
+### When is a review required before import?
+<!-- scenario: trust-the-data; topic: data-quality-policy -->
 
 **Situation:** Consistency findings (unregistered entities, currency mismatches) are present but no source-only validation errors exist.
 
 **Decision:** Status is NEEDS_REVIEW, not SUCCESS.
 
-**Rationale:** Consistency warnings indicate data quality issues even if each individual cell validates. The operator must acknowledge them before proceeding.
+**Rationale:** Consistency warnings indicate data quality issues even if each individual cell validates. The user must acknowledge them before proceeding.
 
-### Quality score weighting
-<!-- jtbd: trust-the-data; topic: data-quality-policy -->
+### How is the data quality score computed?
+<!-- scenario: trust-the-data; topic: data-quality-policy -->
 
 **Situation:** A 0-100 data quality score is computed from findings.
 
@@ -63,17 +63,17 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 **Rationale:** Source-only errors are more disruptive (they block import), so they are weighted more heavily.
 
-### Quality score color bands
-<!-- jtbd: trust-the-data; topic: data-quality-policy -->
+### How are quality scores color-coded?
+<!-- scenario: trust-the-data; topic: data-quality-policy -->
 
 **Situation:** The quality score is displayed on the dashboard.
 
 **Decision:** >= 90 = good (green). >= 70 = warn (yellow). < 70 = bad (red).
 
-**Rationale:** Quick visual triage for the operator.
+**Rationale:** Quick visual triage for the user.
 
-### Template placeholders are errors
-<!-- jtbd: trust-the-data; topic: data-quality-policy -->
+### Are template placeholders treated as data?
+<!-- scenario: trust-the-data; topic: data-quality-policy -->
 
 **Situation:** A cell contains angle-bracket placeholder text (e.g. `<placeholder>`) or instruction text like "add new rows as necessary".
 
@@ -81,17 +81,17 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 **Rationale:** Template instructions left in cells by data submitters should not be imported as data.
 
-### Misspelled enum values are fixable
-<!-- jtbd: fix-problems-before-import; topic: data-quality-policy -->
+### Can a user fix a misspelled value in the tool?
+<!-- scenario: fix-problems-before-import; topic: data-quality-policy -->
 
 **Situation:** A cell value fails enum validation (e.g. misspelled sector name).
 
 **Decision:** The valid enum values are extracted and attached to the finding as correction candidates, making the error fixable via dropdown.
 
-**Rationale:** The operator can select the correct value without needing to know the enum definition.
+**Rationale:** The user can select the correct value without needing to know the enum definition.
 
-### "Not available" and "Not applicable" sentinels
-<!-- jtbd: trust-the-data; topic: data-quality-policy -->
+### How does the tool handle 'Not available' and 'Not applicable' cells?
+<!-- scenario: trust-the-data; topic: data-quality-policy -->
 
 **Situation:** Cells contain the strings "Not available" or "Not applicable" where numeric data is expected.
 
@@ -99,8 +99,8 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 **Rationale:** Preserves the distinction between genuinely empty (NULL) and explicitly marked as unavailable. The ledger is raw; clean tables are analysis-ready.
 
-### Three sentinel types: NotAvailable, NotApplicable, Blank
-<!-- jtbd: trust-the-data; topic: data-quality-policy -->
+### How does the tool distinguish missing data from intentionally empty cells?
+<!-- scenario: trust-the-data; topic: data-quality-policy -->
 
 **Situation:** The parser needs to represent three reasons a cell value is absent: data not available (NV), data not applicable (NA), and field legitimately empty (BLANK).
 
@@ -112,8 +112,8 @@ A field's type signature declares exactly which sentinels it accepts. `NotAvaila
 
 **Rationale:** Combining NV and NA in one enum meant any field accepting one implicitly accepted the other. Three separate types give precise control: `T | NotAvailable` allows data gaps, `T | NotApplicable` allows dependency-driven absence, `T | Blank` allows optional emptiness.
 
-### EITI's enum design conflated values with sentinels
-<!-- jtbd: trust-the-data; topic: data-quality-policy -->
+### Why did the tool replace EITI's enum design?
+<!-- scenario: trust-the-data; topic: data-quality-policy -->
 
 **Situation:** `Sector.NOT_APPLICABLE`, `ProjectStatus.NOT_APPLICABLE`, and `ResponseOption.NOT_APPLICABLE`/`NOT_AVAILABLE` mixed categorical values with absence sentinels in the same StrEnum.
 
@@ -121,8 +121,8 @@ A field's type signature declares exactly which sentinels it accepts. `NotAvaila
 
 **Rationale:** `Sector | NotApplicable` is unambiguous; `Sector` containing both real sectors and `Not applicable` was not. Single source of truth: `"Not available"` always parses to `NotAvailable.NV` (except for `ReportingOption` answers, which are intentionally distinct).
 
-### Parser field types are information contracts
-<!-- jtbd: cross-cutting; topic: data-quality-policy -->
+### What do field types in the parser communicate?
+<!-- scenario: cross-cutting; topic: data-quality-policy -->
 
 **Situation:** Choosing Pydantic field types for parser schemas.
 
@@ -130,8 +130,8 @@ A field's type signature declares exactly which sentinels it accepts. `NotAvaila
 
 **Rationale:** Without explicit sentinels in the type, downstream cannot distinguish "missing data" from "structurally absent" from "legitimately empty". Each sentinel in a union grants a specific permission to the field.
 
-### Field categories: data, dependent, free, structural-NA
-<!-- jtbd: cross-cutting; topic: data-quality-policy -->
+### What categories does the parser use to classify fields?
+<!-- scenario: cross-cutting; topic: data-quality-policy -->
 
 **Situation:** Each parser schema field needs a policy for blank cells.
 
@@ -144,8 +144,8 @@ A field's type signature declares exactly which sentinels it accepts. `NotAvaila
 
 **Rationale:** Categories drive the entire sentinel flow — parser behavior, cleaner rules, and UI visibility all derive from the type signature. No per-field flag table needed.
 
-### Data fields are never BLANK
-<!-- jtbd: trust-the-data; topic: data-quality-policy -->
+### Why is a blank data field always treated as missing rather than legitimate?
+<!-- scenario: trust-the-data; topic: data-quality-policy -->
 
 **Situation:** Some data (e.g., ASM employment, investment) is not tracked by all countries.
 
@@ -153,8 +153,8 @@ A field's type signature declares exactly which sentinels it accepts. `NotAvaila
 
 **Rationale:** The parser cannot know whether data is absent because the country doesn't track it or because they forgot to report it. That distinction is for the human reviewer to assess in the UI. NV signals "this is a data gap" — whether expected or not — and keeps the auto-fill visible.
 
-### Blocking vs non-blocking blank cells
-<!-- jtbd: fix-problems-before-import; topic: data-quality-policy -->
+### Which blank cells block import and which don't?
+<!-- scenario: fix-problems-before-import; topic: data-quality-policy -->
 
 **Situation:** A blank data cell needs classification — should it block import?
 
@@ -167,8 +167,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Blocking is a domain decision encoded in the type. Making it explicit in the Finding code lets the UI present it without needing domain knowledge. The cleaner respects the field-type contract — it does not override strict types or auto-pick between NA/NV when the field declares both as alternatives.
 
-### BLANK_CELL vs INVALID_DATATYPE codes
-<!-- jtbd: fix-problems-before-import; topic: data-quality-policy -->
+### How does the tool distinguish a blank cell from a wrongly-typed value?
+<!-- scenario: fix-problems-before-import; topic: data-quality-policy -->
 
 **Situation:** A cell fails validation. What parser code should it get?
 
@@ -178,8 +178,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Blank cells and wrong-type cells have different error semantics, different cleaner rules, and different reviewer actions. Distinct codes make this explicit.
 
-### Blank cells: parser sets NA, cleaner sets NV
-<!-- jtbd: cross-cutting; topic: data-quality-policy -->
+### Who decides whether a blank cell becomes 'Not applicable' or 'Not available'?
+<!-- scenario: cross-cutting; topic: data-quality-policy -->
 
 **Situation:** A cell is blank. Who decides whether it becomes NV or NA?
 
@@ -191,8 +191,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 ## 2. Currency & Financial Calculations
 
-### Exchange rate convention
-<!-- jtbd: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+### What direction is the exchange rate?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** The About sheet declares an exchange rate.
 
@@ -200,8 +200,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Matches the label used in EITI templates ("Exchange rate used: 1 USD =").
 
-### Zero exchange rate treated as missing
-<!-- jtbd: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+### What happens when the exchange rate is zero?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** The About sheet has exchange rate = 0.
 
@@ -209,8 +209,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Zero is never a meaningful FX rate and would cause division by zero.
 
-### Infinity and NaN exchange rates rejected
-<!-- jtbd: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+### How are nonsensical exchange rates handled?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** The exchange rate field contains a value like "1e309" or "nan".
 
@@ -218,8 +218,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Infinity divisor silently produces 0. NaN propagates. Both produce wrong totals.
 
-### Dual-currency totals
-<!-- jtbd: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+### In what currencies are totals displayed?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** The dashboard displays financial totals.
 
@@ -227,8 +227,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** The EITI audience needs USD comparability across countries, but local currency is what the declaration reports.
 
-### One unconvertible row poisons the total
-<!-- jtbd: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+### What happens to a total if one row cannot be converted?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** A table has rows in mixed currencies and one row cannot be converted.
 
@@ -236,8 +236,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** A partial sum missing some rows would be misleading. Better to show N/A than an incomplete total.
 
-### Foreign non-USD rows are unconvertible
-<!-- jtbd: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+### Why might a row be uncomputable?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** A row's currency is neither the reporting currency nor USD.
 
@@ -245,8 +245,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** The tool has only one exchange rate (USD-local). Converting a third currency (e.g. EUR) requires an additional rate that the file does not provide.
 
-### USD-reporting files need no conversion
-<!-- jtbd: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+### What happens when the reporting currency is USD?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** The About sheet declares reporting currency = USD.
 
@@ -254,8 +254,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** USD-to-USD conversion is identity. Showing the same number twice adds no information.
 
-### Reconciliation gap definition
-<!-- jtbd: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+### How is the reconciliation gap computed?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** The reconciliation gap is computed.
 
@@ -263,8 +263,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Matches the EITI reconciliation methodology (government side as reference).
 
-### Gap percentage prefers local currency
-<!-- jtbd: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+### Which currency is used for the reconciliation gap percentage?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** The reconciliation gap percentage is computed.
 
@@ -272,8 +272,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Local currency avoids introducing conversion noise into the percentage.
 
-### Gap color threshold
-<!-- jtbd: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+### When is the reconciliation gap considered concerning?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** The reconciliation gap is displayed on the dashboard.
 
@@ -281,8 +281,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** 10% threshold is a meaningful indicator of reconciliation quality for EITI data.
 
-### V1 rows assumed to be in reporting currency
-<!-- jtbd: compare-across-versions; topic: currency-financial-calculations -->
+### How is currency handled for v1 files without per-row currency?
+<!-- scenario: compare-across-versions; topic: currency-financial-calculations -->
 
 **Situation:** V1 template files have no per-row currency column.
 
@@ -290,8 +290,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** V1 template design predates per-row currency columns.
 
-### V1 exchange rate fallback from EITI historical data
-<!-- jtbd: compare-across-versions; topic: currency-financial-calculations -->
+### Where does the tool get exchange rates for old v1 files?
+<!-- scenario: compare-across-versions; topic: currency-financial-calculations -->
 
 **Situation:** V1 files never include an exchange rate in the About sheet, but EITI's own API export has rates for 96% of historical declarations.
 
@@ -299,8 +299,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Historical exchange rates are stable and available from EITI's own data. A static JSON avoids runtime dependency on external services. Both language implementations read the same source, preventing drift.
 
-### V1 USD conversion: two independent paths (UI vs DB)
-<!-- jtbd: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+### How does the tool convert v1 rows to USD in the dashboard vs the database?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** V1 files lack exchange rates. USD values are needed both in the dashboard (UI) and in the database views (datasette).
 
@@ -310,8 +310,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** The mapper is not touched — adding a v1-specific branch to the hot path for a one-time historical import is not justified. The backfill script is idempotent and isolated. Both paths read from the same `v1_exchange_rates.json` source.
 
-### SQL views use DROP + CREATE (not IF NOT EXISTS)
-<!-- jtbd: cross-cutting; topic: currency-financial-calculations -->
+### Why are SQL views recreated at startup?
+<!-- scenario: cross-cutting; topic: currency-financial-calculations -->
 
 **Situation:** View definitions may change between releases.
 
@@ -319,17 +319,17 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** `CREATE VIEW IF NOT EXISTS` silently keeps the old definition when the SQL changes. Drop+create ensures the view always matches the code.
 
-### V1 dashboard shows local currency as primary
-<!-- jtbd: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+### Which currency does the v1 dashboard prioritize?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** V1 files without a historical exchange rate have no USD totals, but local totals are computable.
 
 **Decision:** The dashboard shows local currency as the primary (large) figure for v1 files without a rate. No "N/A" notice, no USD line. When USD is available (v2.x with rate, or v1 with fallback rate), USD is shown as primary with local as secondary.
 
-**Rationale:** Showing "N/A" when a computable value exists is misleading. The local total is the most useful number for the operator reviewing the file.
+**Rationale:** Showing "N/A" when a computable value exists is misleading. The local total is the most useful number for the user reviewing the file.
 
-### Sentinel revenue values excluded from clean tables
-<!-- jtbd: trust-the-data; topic: currency-financial-calculations -->
+### What happens to 'Not available' revenue rows in aggregations?
+<!-- scenario: trust-the-data; topic: currency-financial-calculations -->
 
 **Situation:** A revenue cell contains "Not available" or "Not applicable".
 
@@ -341,35 +341,35 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 ## 3. Workflow & Status
 
-### Three-status model
-<!-- jtbd: submit-a-report; topic: workflow-status -->
+### What are the possible statuses of a file?
+<!-- scenario: submit-a-report; topic: workflow-status -->
 
-**Situation:** The operator uploads a file and sees the dashboard.
+**Situation:** The user uploads a file and sees the dashboard.
 
 **Decision:** SUCCESS = no validation errors or crosscheck issues. NEEDS_REVIEW = fixable errors or crosscheck issues. BLOCKED = source-only errors present.
 
-**Rationale:** Maps to the operator's action: proceed immediately, review and correct, or reject back to submitter.
+**Rationale:** Maps to the user's action: proceed immediately, review and correct, or reject back to submitter.
 
-### Degraded output over abort
-<!-- jtbd: trust-the-data; topic: workflow-status -->
+### What does the tool do when an internal check crashes?
+<!-- scenario: trust-the-data; topic: workflow-status -->
 
 **Situation:** A non-critical service (enricher, crosschecker, cleaner) encounters an error.
 
 **Decision:** The service catches its own exceptions, produces an error finding, and returns normally. The pipeline continues. Only template detection and parsing produce terminal errors.
 
-**Rationale:** Degraded output (fewer findings) is more useful than aborting. Enrichment failing should not prevent the operator from seeing validation results.
+**Rationale:** Degraded output (fewer findings) is more useful than aborting. Enrichment failing should not prevent the user from seeing validation results.
 
-### Import requires explicit human confirmation
-<!-- jtbd: submit-a-report; topic: workflow-status -->
+### What information is expected to finalize a data import?
+<!-- scenario: submit-a-report; topic: workflow-status -->
 
 **Situation:** The pipeline reaches the import stage.
 
-**Decision:** The operator must select a responsible user, optionally add comments, and explicitly click "Confirm Import". Rejection returns to a rejected state.
+**Decision:** The user must select a responsible user, optionally add comments, and explicitly click "Confirm Import". Rejection returns to a rejected state.
 
 **Rationale:** Import is the single mutation point. No data is written without deliberate human authorization.
 
-### Audit stamp required for import and deletion
-<!-- jtbd: audit-who-did-what; topic: workflow-status -->
+### Who is held accountable for an import or deletion?
+<!-- scenario: audit-who-did-what; topic: workflow-status -->
 
 **Situation:** Data is about to be written to or deleted from the database.
 
@@ -377,8 +377,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Full accountability chain for who touched the database and why.
 
-### Findings are append-only
-<!-- jtbd: audit-who-did-what; topic: workflow-status -->
+### Can a finding be modified or removed from a session?
+<!-- scenario: audit-who-did-what; topic: workflow-status -->
 
 **Situation:** Services produce findings as they run.
 
@@ -386,39 +386,39 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Preserves the full audit trail of proposed changes.
 
-### User corrections take precedence
-<!-- jtbd: fix-problems-before-import; topic: workflow-status -->
+### What takes priority: the user's correction or the tool's suggestion?
+<!-- scenario: fix-problems-before-import; topic: workflow-status -->
 
-**Situation:** The operator corrects a cell value in the review UI.
+**Situation:** The user corrects a cell value in the review UI.
 
 **Decision:** Correction precedence: user correction > cleaner > extracted data. Corrected values skip automated transforms.
 
-**Rationale:** The operator's explicit fix is the most authoritative source.
+**Rationale:** The user's explicit fix is the most authoritative source.
 
-### "Restart" and "Cancel & Start Over" buttons are destructive
-<!-- jtbd: submit-a-report; topic: workflow-status -->
+### What do the Restart and Cancel & Start Over buttons do?
+<!-- scenario: submit-a-report; topic: workflow-status -->
 
 **Situation:** The Web UI offers a "Restart session" button in the header and a "Cancel & Start Over" button in the template-confirmation modal.
 
-**Decision:** Both call `POST /sessions/{id}/kill`. The session is written as `CANCELLED` (a terminal state), the cached PipelineContext is deleted, and the operator returns to the upload zone. There is no undo. The same applies at batch level: `POST /batches/{id}/kill` cancels every non-terminal member of the batch in one transaction.
+**Decision:** Both call `POST /sessions/{id}/kill`. The session is written as `CANCELLED` (a terminal state), the cached PipelineContext is deleted, and the user returns to the upload zone. There is no undo. The same applies at batch level: `POST /batches/{id}/kill` cancels every non-terminal member of the batch in one transaction.
 
-**Rationale:** "Restart" matches the operator's mental model — start over from scratch. The underlying mechanism is destructive cancellation, not preservation. Cancellation is what releases the file-content hash dedup slot immediately, removes the session from the recovery sweep's attention, and frees the cache row.
+**Rationale:** "Restart" matches the user's mental model — start over from scratch. The underlying mechanism is destructive cancellation, not preservation. Cancellation is what releases the file-content hash dedup slot immediately, removes the session from the recovery sweep's attention, and frees the cache row.
 
-### Batch confirm requires every member to be decided
-<!-- jtbd: submit-a-report; topic: workflow-status -->
+### Can a batch be confirmed if some members are still under review?
+<!-- scenario: submit-a-report; topic: workflow-status -->
 
-**Situation:** The operator clicks "Confirm batch" on a batch whose members are in mixed states (some at CONFIRMING, some still in REVIEWING, some in ERROR_DATA).
+**Situation:** The user clicks "Confirm batch" on a batch whose members are in mixed states (some at CONFIRMING, some still in REVIEWING, some in ERROR_DATA).
 
 **Decision:** `POST /batches/{id}/confirm` returns 409 unless every member is in a decided state (CONFIRMING, CONFIRMED, IMPORTED, REJECTED, ERROR_DATA, ERROR_UNKNOWN, CANCELLED). Once all are decided, CONFIRMED is written atomically for the CONFIRMING subset; members already in terminal states are left alone. The Web UI mirrors this by disabling "Confirm batch" until every member is decided.
 
-**Rationale:** Each batch member is an independent declaration — no business-data atomicity is required across them. But forcing per-member decisions before bulk confirm prevents partial-state surprises: the operator must explicitly resolve each file (approve at review or reject) before bulk-committing the approved subset.
+**Rationale:** Each batch member is an independent declaration — no business-data atomicity is required across them. But forcing per-member decisions before bulk confirm prevents partial-state surprises: the user must explicitly resolve each file (approve at review or reject) before bulk-committing the approved subset.
 
 ---
 
 ## 4. Template Recognition
 
-### Three-signal confidence scoring
-<!-- jtbd: submit-a-report; topic: template-recognition -->
+### How does the tool identify which template a file uses?
+<!-- scenario: submit-a-report; topic: template-recognition -->
 
 **Situation:** An uploaded Excel file needs to be identified as v1, v2.0, or v2.1.
 
@@ -426,8 +426,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Weighted combination handles files with missing metadata or renamed sheets while still producing reliable identification.
 
-### Candidate threshold
-<!-- jtbd: submit-a-report; topic: template-recognition -->
+### When does a template version qualify as a candidate?
+<!-- scenario: submit-a-report; topic: template-recognition -->
 
 **Situation:** Template versions are scored against a file.
 
@@ -435,8 +435,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** 40 is low enough to catch files with significant variations but high enough to exclude random matches.
 
-### Ambiguous detection triggers user confirmation
-<!-- jtbd: submit-a-report; topic: template-recognition -->
+### What happens when more than one template could fit?
+<!-- scenario: submit-a-report; topic: template-recognition -->
 
 **Situation:** Multiple templates score above the threshold.
 
@@ -444,8 +444,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Automatic selection from ambiguous candidates could import data using the wrong schema.
 
-### Exact match skips confirmation
-<!-- jtbd: submit-a-report; topic: template-recognition -->
+### When does the tool skip the template-confirmation step?
+<!-- scenario: submit-a-report; topic: template-recognition -->
 
 **Situation:** Exactly one template scores above the threshold AND the detected cohort set is exactly one NEW cohort with zero DUPE cohorts.
 
@@ -453,8 +453,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** No ambiguity, nothing to choose between, nothing already imported. Reduces friction for the SDF happy path. Any of: ambiguous template, multiple NEW cohorts (fat-file fan-out), or any DUPE cohort routes to the SELECTION_CONFIRMING interrupt for explicit user input.
 
-### Unrecognized file is a terminal error
-<!-- jtbd: submit-a-report; topic: template-recognition -->
+### What happens if the tool can't identify the template?
+<!-- scenario: submit-a-report; topic: template-recognition -->
 
 **Situation:** No template scores above the threshold.
 
@@ -462,8 +462,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Cannot proceed without a known schema to parse against.
 
-### Wrong-sheet penalty
-<!-- jtbd: submit-a-report; topic: template-recognition -->
+### How does the tool handle a table found on the wrong sheet?
+<!-- scenario: submit-a-report; topic: template-recognition -->
 
 **Situation:** A table is found on a different sheet than expected during identification.
 
@@ -471,8 +471,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Files may have tables on moved sheets. This reduces confidence without eliminating the candidate.
 
-### Schema staleness detection
-<!-- jtbd: operate-at-scale; topic: template-recognition -->
+### What happens when the parser schema changes between sessions?
+<!-- scenario: operate-at-scale; topic: template-recognition -->
 
 **Situation:** Parser schema files change between sessions (code deployment).
 
@@ -484,8 +484,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 ## 5. Entity Resolution
 
-### Exact match by normalized name
-<!-- jtbd: trust-the-data; topic: entity-resolution -->
+### How does the tool match a name to an existing entity?
+<!-- scenario: trust-the-data; topic: entity-resolution -->
 
 **Situation:** A company, agency, or project name from the file is compared against the EITI database.
 
@@ -493,8 +493,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Unicode normalization and case-insensitive matching handles accents and capitalization differences without fuzzy matching.
 
-### New entities get UUID4 identifiers
-<!-- jtbd: trust-the-data; topic: entity-resolution -->
+### What identifier is given to a brand-new entity?
+<!-- scenario: trust-the-data; topic: entity-resolution -->
 
 **Situation:** An entity name has no match in the EITI database.
 
@@ -502,8 +502,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** New entities need a stable identifier for the ledger even though they do not exist in the external database yet.
 
-### Companies searched globally; agencies and projects filtered by country
-<!-- jtbd: trust-the-data; topic: entity-resolution -->
+### Why is a company matched globally but agencies and projects per-country?
+<!-- scenario: trust-the-data; topic: entity-resolution -->
 
 **Situation:** The enricher queries the external EITI database.
 
@@ -511,8 +511,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Companies operate across countries (multinational). Agencies and projects are country-specific.
 
-### Declaration UUID from country + year
-<!-- jtbd: avoid-duplicate-imports; topic: entity-resolution -->
+### How is a declaration uniquely identified?
+<!-- scenario: avoid-duplicate-imports; topic: entity-resolution -->
 
 **Situation:** A unique identifier is needed for each declaration.
 
@@ -520,29 +520,29 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Deterministic identity allows detecting re-imports of the same declaration.
 
-### Cohort as the unit of duplicate detection
-<!-- jtbd: avoid-duplicate-imports; topic: entity-resolution -->
+### What does the tool treat as a single submission for duplicate detection?
+<!-- scenario: avoid-duplicate-imports; topic: entity-resolution -->
 
 **Situation:** A file is identified. The system checks the target DB for prior imports.
 
 **Decision:** Detection is per-cohort, not per-file. Each `SubmissionDefinition` declares a `cohort_schema` that enumerates the cohorts the file contains. SDF declares a single `(country_iso3, year)` cohort. Fat-file submissions (validation data, company assessment, API extracts) declare N cohorts per file. DetectorService emits one COHORT_DETECTED finding per cohort and classifies each NEW or DUPE against the target DB.
 
-**Rationale:** A fat file with 50 country-years may have 48 new cohorts and 2 already imported. Per-file dedup would force the operator to delete the prior 2 (or rebuild the file without them) before importing. Per-cohort dedup lets them import only the new cohorts and decide explicitly what to do with the duplicates.
+**Rationale:** A fat file with 50 country-years may have 48 new cohorts and 2 already imported. Per-file dedup would force the user to delete the prior 2 (or rebuild the file without them) before importing. Per-cohort dedup lets them import only the new cohorts and decide explicitly what to do with the duplicates.
 
-### Duplicate submission policy
-<!-- jtbd: avoid-duplicate-imports; topic: entity-resolution -->
+### What happens when the user uploads a file that's already imported?
+<!-- scenario: avoid-duplicate-imports; topic: entity-resolution -->
 
 **Situation:** DetectorService classifies every declared cohort against the target DB.
 
 **Decision:**
-- Every cohort DUPE → terminal `DUPLICATE_SUBMISSION` finding → ERROR.DATA. The operator must explicitly delete the prior import(s) and re-upload if they want to proceed.
-- Mixed NEW + DUPE, or multiple NEW cohorts → SELECTION_CONFIRMING interrupt. The operator picks which cohorts to import.
+- Every cohort DUPE → terminal `DUPLICATE_SUBMISSION` finding → ERROR.DATA. The user must explicitly delete the prior import(s) and re-upload if they want to proceed.
+- Mixed NEW + DUPE, or multiple NEW cohorts → SELECTION_CONFIRMING interrupt. The user picks which cohorts to import.
 - Exactly one NEW + zero DUPE → continue silently.
 
-**Rationale:** All-DUPE means the operator likely uploaded the wrong file or forgot a prior import was already there — fail loud rather than silently overwriting. Mixed cases need human judgment because the answer depends on what the operator intended (re-import a corrected version? skip the duplicates? cancel?). Silent continue is reserved for the unambiguous SDF happy path.
+**Rationale:** All-DUPE means the user likely uploaded the wrong file or forgot a prior import was already there — fail loud rather than silently overwriting. Mixed cases need human judgment because the answer depends on what the user intended (re-import a corrected version? skip the duplicates? cancel?). Silent continue is reserved for the unambiguous SDF happy path.
 
-### False negatives preferred over false positives in entity matching
-<!-- jtbd: trust-the-data; topic: entity-resolution -->
+### Why doesn't the tool guess on close matches?
+<!-- scenario: trust-the-data; topic: entity-resolution -->
 
 **Situation:** The enricher can either match aggressively (risk linking to the wrong entity) or conservatively (risk treating a known entity as new).
 
@@ -554,8 +554,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 ## 6. Consistency Rules
 
-### Part 5 entities must be registered in Part 3
-<!-- jtbd: trust-the-data; topic: consistency-rules -->
+### Why does the tool warn about Part 5 entities missing from Part 3?
+<!-- scenario: trust-the-data; topic: consistency-rules -->
 
 **Situation:** Company, agency, or project names appear in Part 5 (company payments) data.
 
@@ -563,8 +563,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Part 5 should only reference entities formally registered in Part 3. Unregistered entities suggest data entry errors or incomplete registration.
 
-### Part 5 revenue streams must exist in Part 4
-<!-- jtbd: trust-the-data; topic: consistency-rules -->
+### Why does the tool warn about revenue streams in Part 5 not found in Part 4?
+<!-- scenario: trust-the-data; topic: consistency-rules -->
 
 **Situation:** Revenue stream names in Part 5 are not found in Part 4 (government revenues table).
 
@@ -572,8 +572,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Revenue streams should be consistently named across Parts 4 and 5 for reconciliation.
 
-### Entity name matching is case-insensitive
-<!-- jtbd: trust-the-data; topic: consistency-rules -->
+### Are entity names compared case-sensitively?
+<!-- scenario: trust-the-data; topic: consistency-rules -->
 
 **Situation:** Names are compared across parts of the template.
 
@@ -581,8 +581,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Minor capitalization differences should not produce false positives.
 
-### Empty tables produce completeness findings
-<!-- jtbd: trust-the-data; topic: consistency-rules -->
+### What happens when a required table is found but empty?
+<!-- scenario: trust-the-data; topic: consistency-rules -->
 
 **Situation:** The parser found the government revenues or company payments table, but it has zero data rows.
 
@@ -590,17 +590,17 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** An empty table is distinct from a missing table (the parser reports those separately). Zero rows means the parser succeeded but found no data.
 
-### Per-row currency consistency check
-<!-- jtbd: reconcile-government-vs-companies; topic: consistency-rules -->
+### When does the tool flag a per-row currency mismatch?
+<!-- scenario: reconcile-government-vs-companies; topic: consistency-rules -->
 
 **Situation:** V2.0 and v2.1 files have per-row currency columns.
 
 **Decision:** Each row's currency is compared to the reporting currency from the About sheet. Mismatches produce findings.
 
-**Rationale:** Mixed currencies require the exchange rate to be correct and available. The operator should be aware of mismatches.
+**Rationale:** Mixed currencies require the exchange rate to be correct and available. The user should be aware of mismatches.
 
-### Missing reporting currency blocks currency check
-<!-- jtbd: reconcile-government-vs-companies; topic: consistency-rules -->
+### What happens to per-row currency checks if the reporting currency is missing?
+<!-- scenario: reconcile-government-vs-companies; topic: consistency-rules -->
 
 **Situation:** The About sheet does not declare a reporting currency, but per-row currency columns exist.
 
@@ -608,17 +608,17 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Without a reference currency, there is nothing to compare against.
 
-### Crosscheck findings are warnings, not blocking
-<!-- jtbd: trust-the-data; topic: consistency-rules -->
+### Do consistency warnings block import?
+<!-- scenario: trust-the-data; topic: consistency-rules -->
 
 **Situation:** Crosscheck findings are produced.
 
-**Decision:** They trigger NEEDS_REVIEW status, not BLOCKED. The operator can proceed to import after reviewing them.
+**Decision:** They trigger NEEDS_REVIEW status, not BLOCKED. The user can proceed to import after reviewing them.
 
 **Rationale:** Crosscheck issues may be legitimate (e.g. an entity registered under a slightly different name). They require human judgment, not automatic rejection.
 
-### In-file totals crosschecked against computed sums
-<!-- jtbd: trust-the-data; topic: consistency-rules -->
+### What does the tool do with 'Total' rows already in the file?
+<!-- scenario: trust-the-data; topic: consistency-rules -->
 
 **Situation:** Excel files include "Total in [currency]" rows that contain pre-computed sums.
 
@@ -626,8 +626,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Excel SUMIF rounding produces sub-cent drift. A tolerance of 1.0 absorbs this without masking genuine discrepancies.
 
-### Totals crosscheck uses declarative config
-<!-- jtbd: cross-cutting; topic: consistency-rules -->
+### How does the totals check work across different submission types?
+<!-- scenario: cross-cutting; topic: consistency-rules -->
 
 **Situation:** Different submission types have different table names, field names, and grouping semantics for the totals comparison.
 
@@ -639,8 +639,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 ## 7. Import Behavior
 
-### Importer has no domain knowledge
-<!-- jtbd: cross-cutting; topic: import-behavior -->
+### Why does the importer never inspect the data being written?
+<!-- scenario: cross-cutting; topic: import-behavior -->
 
 **Situation:** Data needs to be written to the database.
 
@@ -648,8 +648,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Single responsibility. The importer cannot introduce data interpretation errors.
 
-### Re-import replaces existing data
-<!-- jtbd: submit-a-report; topic: import-behavior -->
+### What happens if the user re-imports a declaration?
+<!-- scenario: submit-a-report; topic: import-behavior -->
 
 **Situation:** An import targets a declaration that already has data in the database.
 
@@ -657,8 +657,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Re-import should produce the same result as a fresh import. No duplicate accumulation.
 
-### Metadata tables use upsert
-<!-- jtbd: cross-cutting; topic: import-behavior -->
+### What happens to reference data from multiple files of the same country?
+<!-- scenario: cross-cutting; topic: import-behavior -->
 
 **Situation:** Reference data (countries, currencies, GFS codes) may already exist.
 
@@ -666,26 +666,26 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Multiple files from the same country should not create duplicate records.
 
-### Deletion is audit-preserving
-<!-- jtbd: audit-who-did-what; topic: import-behavior -->
+### What is kept when a declaration is deleted?
+<!-- scenario: audit-who-did-what; topic: import-behavior -->
 
-**Situation:** The operator deletes a declaration from the data management tab.
+**Situation:** The user deletes a declaration from the data management tab.
 
 **Decision:** Data rows (clean tables and ledger) are permanently deleted. The summary data file record is soft-deleted. An audit record of the deletion persists.
 
 **Rationale:** Data is permanently removed for privacy and correctness, but the audit trail of who deleted what and when is preserved.
 
-### Deletion requires two-step confirmation
-<!-- jtbd: audit-who-did-what; topic: import-behavior -->
+### What does the user have to do to delete a declaration?
+<!-- scenario: audit-who-did-what; topic: import-behavior -->
 
-**Situation:** The operator clicks "Delete".
+**Situation:** The user clicks "Delete".
 
 **Decision:** First step: select responsible user and click "Delete permanently". Second step: browser confirmation dialog.
 
 **Rationale:** Destructive operation requires deliberate intent.
 
-### Clean tables generated via SQL
-<!-- jtbd: cross-cutting; topic: import-behavior -->
+### How are clean tables built after import?
+<!-- scenario: cross-cutting; topic: import-behavior -->
 
 **Situation:** After ledger rows are written.
 
@@ -693,8 +693,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Clean tables denormalize data for direct querying. No application code needed for the denormalization step.
 
-### Missing declaration UUID blocks import
-<!-- jtbd: submit-a-report; topic: import-behavior -->
+### Why might an import fail at the last step?
+<!-- scenario: submit-a-report; topic: import-behavior -->
 
 **Situation:** No declaration UUID is found in the pipeline findings when the importer runs.
 
@@ -702,39 +702,39 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** The declaration UUID is the primary key for all data rows. Without it, nothing can be written.
 
-### Duplicate detection runs in three independent layers
-<!-- jtbd: avoid-duplicate-imports; topic: import-behavior -->
+### What kinds of duplicate uploads does the tool catch?
+<!-- scenario: avoid-duplicate-imports; topic: import-behavior -->
 
-**Situation:** An operator uploads a file that may have been imported before.
+**Situation:** An user uploads a file that may have been imported before.
 
 **Decision:** Three layers run in sequence, each catching a different failure shape:
 
 - **Layer 1 — file-content hash at upload.** SHA-256 of the upload bytes is checked against prior successful imports. A match rejects the upload with 409. Catches "same file uploaded twice."
 - **Layer 2 — cohort classification at identification.** The detector enumerates the cohorts the file contains (one for SDF, N for fat files) via the submission's `cohort_schema`. Each cohort is checked against the active declaration registry. All-DUPE terminates with ERROR.DATA; mixed NEW/DUPE routes to the SELECTION_CONFIRMING interrupt. Catches "different file claiming the same identity" and "fat file overlapping with prior imports."
-- **Layer 3 — file-content hash at confirmation.** The hash is re-checked against both committed imports AND active in-flight sibling sessions before the importer commits. A match rejects with 409. Catches the race where two operators upload identical content simultaneously and both pass Layer 1.
+- **Layer 3 — file-content hash at confirmation.** The hash is re-checked against both committed imports AND active in-flight sibling sessions before the importer commits. A match rejects with 409. Catches the race where two users upload identical content simultaneously and both pass Layer 1.
 
-**Rationale:** Each layer has a different blast radius. Layer 1 is cheapest, catches the common case, runs before any pipeline work begins. Layer 2 handles the semantic "I edited the file but it's still the same declaration" case. Layer 3 is structural, vanishingly rare in a single-operator team, but closes the TOCTOU window that the other two cannot.
+**Rationale:** Each layer has a different blast radius. Layer 1 is cheapest, catches the common case, runs before any pipeline work begins. Layer 2 handles the semantic "I edited the file but it's still the same declaration" case. Layer 3 is structural, vanishingly rare in a single-user team, but closes the TOCTOU window that the other two cannot.
 
-### Hash dedup respects soft-delete
-<!-- jtbd: avoid-duplicate-imports; topic: import-behavior -->
+### Can the user re-upload the same file after deleting the prior import?
+<!-- scenario: avoid-duplicate-imports; topic: import-behavior -->
 
-**Situation:** An operator deleted a declaration and re-uploads the same file (identical bytes).
+**Situation:** An user deleted a declaration and re-uploads the same file (identical bytes).
 
 **Decision:** Soft-deleted prior imports do NOT block the upload — the hash check looks only for active declarations (`is_deleted = 0`).
 
-**Rationale:** Deletion is the operator's "let me try again" signal. Permanent blocking would defeat the user flow.
+**Rationale:** Deletion is the user's "let me try again" signal. Permanent blocking would defeat the user flow.
 
-### Failed imports do not block retries
-<!-- jtbd: avoid-duplicate-imports; topic: import-behavior -->
+### Can the user retry the same file after an import failure?
+<!-- scenario: avoid-duplicate-imports; topic: import-behavior -->
 
-**Situation:** An operator's prior upload of the same file failed mid-import (status != success).
+**Situation:** An user's prior upload of the same file failed mid-import (status != success).
 
 **Decision:** The hash check filters on `status = success` only. Failed imports are invisible to dedup.
 
-**Rationale:** Retries of failed work are the legitimate next step. Blocking them would force the operator to mutate the file just to bypass the check.
+**Rationale:** Retries of failed work are the legitimate next step. Blocking them would force the user to mutate the file just to bypass the check.
 
-### File-hash dedup is disabled in LOCAL only
-<!-- jtbd: operate-at-scale; topic: import-behavior -->
+### When is duplicate detection by file hash skipped?
+<!-- scenario: operate-at-scale; topic: import-behavior -->
 
 **Situation:** A developer iterates on a fixture file on their laptop, repeatedly re-uploading.
 
@@ -742,10 +742,10 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Dev iteration without bypass forces `mise run db:reset` between every test upload — friction with no integrity benefit at a single-developer machine. Server environments enforce dedup uniformly; no caller can disable it.
 
-### Hash-collision 409 surfaces a release action
-<!-- jtbd: avoid-duplicate-imports; topic: import-behavior -->
+### What happens when a colleague's stuck session blocks the user from confirming a file?
+<!-- scenario: avoid-duplicate-imports; topic: import-behavior -->
 
-**Situation:** Operator B uploads a file whose SHA-256 matches an in-flight session held by Operator A (who walked away mid-flow). Without intervention, Operator B is blocked from confirming until Operator A's session TTL expires (hours to days).
+**Situation:** User B uploads a file whose SHA-256 matches an in-flight session held by User A (who walked away mid-flow). Without intervention, User B is blocked from confirming until User A's session TTL expires (hours to days).
 
 **Decision:** 409 responses at upload time and at confirmation time include `sibling_session_ids`, `sibling_batch_id` (if applicable), and a structured `release_action(s)` field naming the kill endpoint the caller can invoke to release the dedup slot immediately. The Web UI surfaces this as a "Cancel that session and retry" modal action; the CLI prompts via `questionary`.
 
@@ -755,8 +755,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 ## 8. Version Differences
 
-### V1 has no Excel named tables
-<!-- jtbd: compare-across-versions; topic: version-differences -->
+### Does v1 use Excel's named tables?
+<!-- scenario: compare-across-versions; topic: version-differences -->
 
 **Situation:** V1 template does not use Excel's formal named table feature.
 
@@ -764,8 +764,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** V1 template design predates Excel named tables.
 
-### V1 has no projects or agencies tables
-<!-- jtbd: compare-across-versions; topic: version-differences -->
+### Does v1 collect data on projects and agencies?
+<!-- scenario: compare-across-versions; topic: version-differences -->
 
 **Situation:** V1 template does not have dedicated sheets for projects or agencies.
 
@@ -773,8 +773,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** V1 template does not include these entities.
 
-### Government revenue field name differs across versions
-<!-- jtbd: compare-across-versions; topic: version-differences -->
+### What field holds the government revenue value across versions?
+<!-- scenario: compare-across-versions; topic: version-differences -->
 
 **Situation:** The stats engine sums government revenues.
 
@@ -782,8 +782,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Different template versions use different column names for the same concept.
 
-### V1 has no per-row currency columns
-<!-- jtbd: compare-across-versions; topic: version-differences -->
+### Does v1 declare currency per row?
+<!-- scenario: compare-across-versions; topic: version-differences -->
 
 **Situation:** Currency consistency check or stats computation for a v1 file.
 
@@ -791,8 +791,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** V1 template predates per-row currency columns.
 
-### V1 revenue sheet is pivoted
-<!-- jtbd: compare-across-versions; topic: version-differences -->
+### How is the v1 revenue sheet shaped compared to v2?
+<!-- scenario: compare-across-versions; topic: version-differences -->
 
 **Situation:** V1 has companies as column headers rather than rows in the revenue sheet.
 
@@ -800,8 +800,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Normalizes the data to a consistent shape for all downstream processing.
 
-### Separate ledger tables per version
-<!-- jtbd: compare-across-versions; topic: version-differences -->
+### Why are there separate ledger tables per template version?
+<!-- scenario: compare-across-versions; topic: version-differences -->
 
 **Situation:** V1, v2.0, and v2.1 have different column sets.
 
@@ -809,8 +809,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Shared tables would require nullable columns for version-specific fields, making queries harder.
 
-### About sheet field names differ across versions
-<!-- jtbd: compare-across-versions; topic: version-differences -->
+### How does the tool find the same About-sheet field across versions?
+<!-- scenario: compare-across-versions; topic: version-differences -->
 
 **Situation:** V1 uses "ISO currency code" / "Conversion rate". V2.x uses "Reporting currency (ISO-4217)" / "Exchange rate used: 1 USD =".
 
@@ -818,8 +818,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Single source of truth for field name resolution. Adding a new version only requires updating the config.
 
-### V2.0 non-obvious table names
-<!-- jtbd: compare-across-versions; topic: version-differences -->
+### Why does v2.0 reference internal Excel table names that don't match the data?
+<!-- scenario: compare-across-versions; topic: version-differences -->
 
 **Situation:** V2.0 has tables named "Companies15" (projects) and "Table10" (company data).
 
@@ -827,8 +827,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** V2.0 template uses inconsistent internal Excel names that do not match their semantic purpose.
 
-### V1 government revenue parent rows are filtered at parse time
-<!-- jtbd: compare-across-versions; topic: version-differences -->
+### How does the tool filter out v1 GFS taxonomy parent rows?
+<!-- scenario: compare-across-versions; topic: version-differences -->
 
 **Situation:** V1 templates render the GFS taxonomy as visual indent in revenue rows. Parent rows like `('11E', 'Taxes', None, None, None, None)` reach the parser as candidate data rows alongside real data rows.
 
@@ -836,8 +836,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Without the filter, the sentinel-only typing would generate ~50 spurious `BLANK_CELL` findings per file from parent rows whose blanks are structural, not country gaps. The principled placement is on `BaseTableSchema` (not `HeaderSearchSchema`) because the policy generalises — any future schema can declare a row filter. Row-iterating readers (`TableReader`, `PivotTableReader`) call `schema.row_filter` directly, no `getattr` duck-typing. v2.x schemas leave it `None`; their data is already flat.
 
-### V1 schemas use sentinel-only typing per the country-side / template-side split
-<!-- jtbd: compare-across-versions; topic: version-differences -->
+### How does the tool distinguish country-supplied fields from template-supplied labels in v1?
+<!-- scenario: compare-across-versions; topic: version-differences -->
 
 **Situation:** The sentinel-only typing (ADR-009) is extended to v1 schemas.
 
@@ -849,8 +849,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 ## Cross-Cutting
 
-### Stats computed client-side
-<!-- jtbd: cross-cutting; topic: cross-cutting -->
+### Where are dashboard stats computed: server or browser?
+<!-- scenario: cross-cutting; topic: cross-cutting -->
 
 **Situation:** The dashboard needs financial totals and reconciliation gap.
 
@@ -858,8 +858,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Stats are a presentation concern. The pipeline context carries only raw data and findings, not derived statistics.
 
-### Shared JSON config between Python and JS
-<!-- jtbd: cross-cutting; topic: cross-cutting -->
+### How do Python and JS produce consistent stats?
+<!-- scenario: cross-cutting; topic: cross-cutting -->
 
 **Situation:** Both Python and JS need the same table and field mappings.
 
@@ -867,17 +867,17 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Eliminates drift between the two implementations.
 
-### Per-check exception isolation in crosschecker
-<!-- jtbd: cross-cutting; topic: cross-cutting -->
+### What happens when a single crosscheck function crashes?
+<!-- scenario: cross-cutting; topic: cross-cutting -->
 
 **Situation:** One crosscheck function crashes.
 
 **Decision:** Each check is wrapped in its own try/except. A crash produces an error finding scoped to that check. Other checks still run.
 
-**Rationale:** One bad check should not prevent the operator from seeing results from other checks.
+**Rationale:** One bad check should not prevent the user from seeing results from other checks.
 
-### Numeric ID normalization
-<!-- jtbd: trust-the-data; topic: cross-cutting -->
+### How are numeric IDs from Excel handled?
+<!-- scenario: trust-the-data; topic: cross-cutting -->
 
 **Situation:** Excel reads numeric IDs (company ID, project ID) as floats (e.g. 12345.0).
 
@@ -885,8 +885,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** IDs are identifiers, not numbers. Excel's float representation should not leak into the data.
 
-### Datasette streaming for large entity tables
-<!-- jtbd: operate-at-scale; topic: cross-cutting -->
+### How does the tool avoid truncating large entity lists from the database?
+<!-- scenario: operate-at-scale; topic: cross-cutting -->
 
 **Situation:** The enricher fetches entity data from the external EITI database via Datasette.
 
@@ -894,8 +894,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Without streaming, Datasette's default row limit (5000) silently truncates large tables (the companies table has 5400+ rows).
 
-### Session expiration
-<!-- jtbd: operate-at-scale; topic: cross-cutting -->
+### What happens to abandoned sessions?
+<!-- scenario: operate-at-scale; topic: cross-cutting -->
 
 **Situation:** A session is abandoned (user never resumes).
 
@@ -903,8 +903,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Abandoned sessions should not consume storage indefinitely.
 
-### Sector validation suspended for v2.1 company revenue
-<!-- jtbd: trust-the-data; topic: cross-cutting -->
+### Why is the v2.x sector field not validated?
+<!-- scenario: trust-the-data; topic: cross-cutting -->
 
 **Situation:** The sector field on v2.1 company revenue rows.
 
@@ -912,17 +912,17 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** EITI has not clarified the expected values for this field. Suspending validation avoids rejecting valid data.
 
-### Pipeline configuration priority: client > submission type > service
-<!-- jtbd: cross-cutting; topic: cross-cutting -->
+### How is pipeline behavior customized across clients and submission types?
+<!-- scenario: cross-cutting; topic: cross-cutting -->
 
 **Situation:** Multiple layers need to control what the pipeline does — the submission type defines version-specific rules, but the client (API, CLI, batch) may need to override which services run or what dependencies they use.
 
 **Decision:** Three-tier priority model. Service defaults are the fallback. Submission type config (per-service dicts keyed by SubmissionID) overrides defaults. Client instructions (factory skip flags + DI parameters) override everything.
 
-**Rationale:** Keeps the pipeline linear and predictable while allowing both data-driven customization (submission type) and operator-driven customization (client mode).
+**Rationale:** Keeps the pipeline linear and predictable while allowing both data-driven customization (submission type) and user-driven customization (client mode).
 
-### Submission-type config is scattered, not centralized
-<!-- jtbd: cross-cutting; topic: cross-cutting -->
+### Why is per-submission-type config spread across services rather than centralized?
+<!-- scenario: cross-cutting; topic: cross-cutting -->
 
 **Situation:** Each service maintains its own config dict keyed by SubmissionID. Adding a new submission type requires touching 6+ files.
 
@@ -930,8 +930,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Scattered dicts are pragmatic for 3 types. Centralization is the right long-term architecture but a significant refactor.
 
-### Enricher/mapper split forced by review interrupt boundary
-<!-- jtbd: cross-cutting; topic: cross-cutting -->
+### Why are entity resolution and ID assignment split into two services?
+<!-- scenario: cross-cutting; topic: cross-cutting -->
 
 **Situation:** Entity resolution needs two steps — resolve names to database IDs, then assign fresh IDs to unresolved names. Both could live in one service.
 
@@ -939,8 +939,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** User corrections at the review interrupt can change entity names. ID assignment must happen after corrections are final. If the enricher assigned IDs before review, corrections would invalidate already-issued IDs with no mechanism to update downstream references.
 
-### Cleaner fills NV only for BLANK_CELL (non-blocking)
-<!-- jtbd: fix-problems-before-import; topic: cross-cutting -->
+### Which kinds of blank cells does the cleaner auto-fill?
+<!-- scenario: fix-problems-before-import; topic: cross-cutting -->
 
 **Situation:** The parser distinguishes three blank-cell codes by field type — `BLANK_CELL` (non-blocking, `T | NotAvailable`), `BLANK_CELL_BLOCKING` (strict `T`), `BLANK_CELL_DEPENDENT` (`T | NotApplicable` with upstream present). Earlier draft of this PR auto-filled all three; reverted because strict types declare a hard contract.
 
@@ -948,8 +948,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Auto-filling NV on a strict-typed field would lie about the contract. The whole point of declaring `revenue_value: float` (no sentinel) is to require real data. The cleaner respects the field-type semantics; the user makes the call for ambiguous cases via review or FLAGGED escalation.
 
-### /review gate requires explicit coverage for every VALIDATION finding
-<!-- jtbd: fix-problems-before-import; topic: cross-cutting -->
+### What does the tool require before letting the user move past review?
+<!-- scenario: fix-problems-before-import; topic: cross-cutting -->
 
 **Situation:** Pre-PR gate excluded findings with candidates from "unfixable." That meant a `BLANK_CELL_DEPENDENT` carrying `candidates=('Not applicable',)` passed the gate without the user actually picking — and the row got written with NULL into a nullable column.
 
@@ -957,8 +957,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** The "candidates exist therefore fixable" check was a soft promise. Forcing user picks closes the silent-NULL path that previously existed. UX impact: every dropdown-fixable cell becomes a required review action, which matches the strict-typing philosophy.
 
-### Mapper emits CELL_MAPPED for every column on validated rows; failed rows skipped
-<!-- jtbd: cross-cutting; topic: cross-cutting -->
+### How does the tool guarantee that every imported cell has been mapped?
+<!-- scenario: cross-cutting; topic: cross-cutting -->
 
 **Situation:** Pre-PR, the mapper had two independent paths that could silently write NULL into a data column: a `if val is not None: emit_finding(...)` skip, and the importer's `_coerce_row` None fallback. Combined with nullable DDL, this hid contract violations.
 
@@ -966,8 +966,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Closes the silent-NULL path at multiple levels. Numeric `*_col_content: float | None` columns remain nullable; a future typed-storage refactor will address those.
 
-### FLAGGED replaces DISMISSED; two-endpoint feedback flow
-<!-- jtbd: fix-problems-before-import; topic: cross-cutting -->
+### How does the user escalate a finding the tool can't resolve?
+<!-- scenario: fix-problems-before-import; topic: cross-cutting -->
 
 **Situation:** `CorrectionCode.DISMISSED` was reserved for "user dismisses the error, importer keeps going." That bypass is obsolete — under the strict-type design, blanks either become sentinel strings (cleaner-filled or user-picked) or get rejected by the /review gate. There's no "dismiss and keep going" path anymore.
 
@@ -975,8 +975,8 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Rationale:** Separates iterative editing from terminal abort. Modal can save freely without committing. Survives session abort so the dev team can query flagged findings post-mortem.
 
-### `Finding.table_row_index` is 0-indexed; presentation layer adds +1
-<!-- jtbd: cross-cutting; topic: cross-cutting -->
+### How does the tool keep row numbers consistent across the API and the UI?
+<!-- scenario: cross-cutting; topic: cross-cutting -->
 
 **Situation:** The parser emitted `ParsingError.table_row_index = i + 1` (1-indexed) while every other service (enricher, crosschecker, mapper) used `enumerate(rows)` (0-indexed). The mismatch caused user `USER_CHOICE` and cleaner-produced `BLANK_TO_NOT_AVAILABLE` overrides to silently miss in the mapper's `overrides.get((table, row_idx, field))` lookup. Bug uncaught because no integration test exercised override application.
 
