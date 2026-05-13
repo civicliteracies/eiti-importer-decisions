@@ -357,6 +357,38 @@ main a { color: var(--accent); }
 .fields dd > p:last-child { margin-bottom: 0; }
 .fields dd > ul, .fields dd > ol { margin: 0.4rem 0; }
 
+/* Technical detail rows are hidden by default; toggle reveals them. */
+body:not(.show-technical) .field-technical { display: none; }
+body.show-technical .fields dt.field-technical {
+  color: var(--accent);
+  font-style: italic;
+}
+
+.tech-toggle {
+  margin-top: 1.5rem;
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  background: var(--bg-soft);
+  color: var(--fg-muted);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  text-align: left;
+  transition: color 120ms, border-color 120ms, background 120ms;
+}
+.tech-toggle:hover {
+  color: var(--fg);
+  border-color: var(--fg-subtle);
+}
+.tech-toggle[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* === Pending callout === */
 
 .pending-view {

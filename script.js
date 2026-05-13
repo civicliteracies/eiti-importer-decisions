@@ -54,6 +54,29 @@
   let entries = [];
   let activeObserver = null;
 
+  // === Technical-detail toggle ===
+
+  function currentTech() {
+    try { return localStorage.getItem('show-technical') === '1'; }
+    catch { return false; }
+  }
+
+  function applyTech(on) {
+    document.body.classList.toggle('show-technical', on);
+    const btn = document.getElementById('tech-toggle');
+    if (btn) {
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.textContent = on ? 'Hide technical detail' : 'Show technical detail';
+    }
+    try { localStorage.setItem('show-technical', on ? '1' : '0'); } catch {}
+  }
+
+  function initTechToggle() {
+    applyTech(currentTech());
+    const btn = document.getElementById('tech-toggle');
+    if (btn) btn.addEventListener('click', () => applyTech(!currentTech()));
+  }
+
   // === Tabs ===
 
   function currentTab() {
@@ -278,6 +301,10 @@
         dt.textContent = f.label;
         const dd = document.createElement('dd');
         f.content.forEach((c) => dd.appendChild(c));
+        if (/^technical\s+detail$/i.test(f.label)) {
+          dt.classList.add('field-technical');
+          dd.classList.add('field-technical');
+        }
         dl.appendChild(dt);
         dl.appendChild(dd);
       }
@@ -400,5 +427,6 @@
 
   initTabs();
   initViewToggle();
+  initTechToggle();
   loadAndRender();
 })();
