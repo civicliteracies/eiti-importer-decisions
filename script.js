@@ -1,8 +1,6 @@
 /* eslint-env browser */
 (() => {
   const SOURCE = './decision-log.md';
-  const THEMES = ['system', 'light', 'dark'];
-  const THEME_LABELS = { system: 'Auto', light: 'Light', dark: 'Dark' };
 
   const TOPIC_ORDER = [
     'data-quality-policy',
@@ -28,7 +26,7 @@
     'cross-cutting': 'Cross-Cutting',
   };
 
-  const JTBD_ORDER = [
+  const SCENARIO_ORDER = [
     'submit-a-report',
     'trust-the-data',
     'fix-problems-before-import',
@@ -40,7 +38,7 @@
     'cross-cutting',
   ];
 
-  const JTBD_LABELS = {
+  const SCENARIO_LABELS = {
     'submit-a-report': 'Submit a report',
     'trust-the-data': 'Trust the data',
     'fix-problems-before-import': 'Fix problems before import',
@@ -54,29 +52,7 @@
 
   // Module state
   let entries = [];
-
-  // === Theme ===
-
-  function applyTheme(t) {
-    if (!THEMES.includes(t)) t = 'system';
-    document.documentElement.dataset.theme = t;
-    const label = document.getElementById('theme-label');
-    if (label) label.textContent = THEME_LABELS[t];
-    try { localStorage.setItem('theme', t); } catch {}
-  }
-
-  function cycleTheme() {
-    const cur = (() => { try { return localStorage.getItem('theme'); } catch { return null; } })() || 'system';
-    const idx = THEMES.indexOf(cur);
-    applyTheme(THEMES[(idx + 1) % THEMES.length]);
-  }
-
-  function initTheme() {
-    const stored = (() => { try { return localStorage.getItem('theme'); } catch { return null; } })();
-    applyTheme(stored || 'system');
-    const btn = document.getElementById('theme-toggle');
-    if (btn) btn.addEventListener('click', cycleTheme);
-  }
+  let activeObserver = null;
 
   // === Tabs ===
 
@@ -102,12 +78,13 @@
   // === Group-by toggle ===
 
   function currentView() {
-    try { return localStorage.getItem('group-by') === 'jtbd' ? 'jtbd' : 'topic'; }
-    catch { return 'topic'; }
+    let stored = null;
+    try { stored = localStorage.getItem('group-by'); } catch {}
+    return stored === 'topic' ? 'topic' : 'scenario'; // default = scenario
   }
 
   function applyView(v) {
-    if (v !== 'topic' && v !== 'jtbd') v = 'topic';
+    if (v !== 'topic' && v !== 'scenario') v = 'scenario';
     try { localStorage.setItem('group-by', v); } catch {}
     document.querySelectorAll('.view-toggle button').forEach((b) => {
       const on = b.dataset.view === v;
@@ -115,7 +92,7 @@
       b.setAttribute('aria-checked', on ? 'true' : 'false');
     });
     const tocTitle = document.getElementById('toc-title');
-    if (tocTitle) tocTitle.textContent = v === 'jtbd' ? 'Jobs' : 'Topics';
+    if (tocTitle) tocTitle.textContent = v === 'scenario' ? 'Scenarios' : 'Topics';
     if (entries.length > 0) {
       renderDecidedView(v);
       buildToc();
@@ -150,11 +127,11 @@
     main.removeAttribute('aria-busy');
 
     hideIntro(main);
-    attachMetadata(main); // before splitIntoSections, while comments are still adjacent to h3
+    attachMetadata(main); // before splitIntoSections — comments are still adjacent to h3 here
     splitIntoSections(main);
     structureFields(main);
     entries = collectEntries(main);
-    applyView(currentView()); // re-renders decided-view, builds toc, scroll spy
+    applyView(currentView());
     updatePendingBadge();
     updateLastModified();
   }
@@ -210,6 +187,44 @@
       n = n.nextElementSibling;
     }
     blocks.forEach((b) => target.appendChild(b));
+  }
+
+  // === Metadata extraction (before section wrapping or field structuring) ===
+
+  function attachMetadata(main) {
+    for (const h3 of main.querySelectorAll('h3')) {
+      let n = h3.nextSibling;
+      while (n && n.nodeType !== Node.ELEMENT_NODE) {
+        if (n.nodeType === Node.COMMENT_NODE) {
+          const m = /scenario\s*:\s*([\w-]+)\s*;\s*topic\s*:\s*([\w-]+)/.exec(n.data);
+          if (m) {
+            h3.dataset.scenario = m[1];
+            h3.dataset.topic = m[2];
+            const toRemove = n;
+            n = n.nextSibling;
+            toRemove.remove();
+            break;
+          }
+        }
+        n = n.nextSibling;
+      }
+    }
+  }
+
+  function collectEntries(main) {
+    const list = [];
+    const decided = main.querySelector('.decided-view');
+    if (!decided) return list;
+    for (const h3 of decided.querySelectorAll('h3')) {
+      const { scenario, topic } = h3.dataset;
+      if (!scenario || !topic) continue;
+      const dl =
+        h3.nextElementSibling && h3.nextElementSibling.tagName === 'DL'
+          ? h3.nextElementSibling
+          : null;
+      list.push({ title: h3.textContent, h3, dl, scenario, topic });
+    }
+    return list;
   }
 
   // === Field structuring ===
@@ -284,51 +299,13 @@
     });
   }
 
-  // === Metadata extraction (must run before structureFields) ===
-
-  function attachMetadata(main) {
-    for (const h3 of main.querySelectorAll('h3')) {
-      let n = h3.nextSibling;
-      while (n && n.nodeType !== Node.ELEMENT_NODE) {
-        if (n.nodeType === Node.COMMENT_NODE) {
-          const m = /jtbd\s*:\s*([\w-]+)\s*;\s*topic\s*:\s*([\w-]+)/.exec(n.data);
-          if (m) {
-            h3.dataset.jtbd = m[1];
-            h3.dataset.topic = m[2];
-            const toRemove = n;
-            n = n.nextSibling;
-            toRemove.remove();
-            break;
-          }
-        }
-        n = n.nextSibling;
-      }
-    }
-  }
-
-  function collectEntries(main) {
-    const list = [];
-    const decided = main.querySelector('.decided-view');
-    if (!decided) return list;
-    for (const h3 of decided.querySelectorAll('h3')) {
-      const { jtbd, topic } = h3.dataset;
-      if (!jtbd || !topic) continue;
-      const dl =
-        h3.nextElementSibling && h3.nextElementSibling.tagName === 'DL'
-          ? h3.nextElementSibling
-          : null;
-      list.push({ title: h3.textContent, h3, dl, jtbd, topic });
-    }
-    return list;
-  }
-
-  // === View rendering (group by topic or jtbd) ===
+  // === View rendering ===
 
   function renderDecidedView(view) {
     const decided = document.querySelector('.decided-view');
     if (!decided) return;
-    const order = view === 'jtbd' ? JTBD_ORDER : TOPIC_ORDER;
-    const labels = view === 'jtbd' ? JTBD_LABELS : TOPIC_LABELS;
+    const order = view === 'scenario' ? SCENARIO_ORDER : TOPIC_ORDER;
+    const labels = view === 'scenario' ? SCENARIO_LABELS : TOPIC_LABELS;
 
     const groups = new Map(order.map((k) => [k, []]));
     for (const e of entries) {
@@ -376,8 +353,6 @@
     });
   }
 
-  let activeObserver = null;
-
   function setupScrollSpy() {
     if (activeObserver) {
       activeObserver.disconnect();
@@ -423,7 +398,6 @@
 
   // === Boot ===
 
-  initTheme();
   initTabs();
   initViewToggle();
   loadAndRender();

@@ -1,35 +1,22 @@
 <!doctype html>
-<html lang="en" data-theme="system">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>EITI Data Importer — Decision Log</title>
-  <meta name="description" content="How the EITI Data Importer handles data, organized by topic. A reference artifact for client discussions and stakeholder visibility.">
+  <meta name="description" content="How the EITI Data Importer handles data, organized by scenario and topic. A reference artifact for stakeholder discussions.">
   <link rel="stylesheet" href="style.css">
-  <script>
-    // Apply theme before paint to avoid flash
-    (function () {
-      try {
-        var t = localStorage.getItem('theme') || 'system';
-        document.documentElement.dataset.theme = t;
-      } catch (e) {}
-    })();
-  </script>
 </head>
 <body data-tab="decided">
   <header class="site-header">
     <div class="site-header-inner">
-      <div class="site-header-text">
-        <p class="eyebrow">EITI Data Importer</p>
-        <h1>Decision Log</h1>
-        <p class="lede">How the importer handles data. A reference for stakeholder discussions, updated automatically from the source repository.</p>
-      </div>
-      <div class="site-header-controls">
-        <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Cycle theme">
-          <span class="theme-label" id="theme-label">Auto</span>
-        </button>
-      </div>
+      <p class="eyebrow">EITI Data Importer</p>
+      <h1>Decision Log</h1>
+      <p class="lede">How the importer handles data. A reference for stakeholder discussions, updated automatically from the source repository.</p>
     </div>
+  </header>
+
+  <div class="control-strip">
     <nav class="tabs" role="tablist" aria-label="Decision view">
       <a href="#/decided" class="tab" role="tab" data-tab="decided" aria-selected="true">Decided</a>
       <a href="#/pending" class="tab" role="tab" data-tab="pending" aria-selected="false">
@@ -39,15 +26,15 @@
     <div class="view-controls" id="view-controls">
       <span class="view-label">Group by</span>
       <div class="view-toggle" role="radiogroup" aria-label="Grouping">
-        <button type="button" data-view="topic" role="radio" aria-checked="true" class="is-active">Topic</button>
-        <button type="button" data-view="jtbd" role="radio" aria-checked="false">Job</button>
+        <button type="button" data-view="scenario" role="radio" aria-checked="true" class="is-active">Scenario</button>
+        <button type="button" data-view="topic" role="radio" aria-checked="false">Topic</button>
       </div>
     </div>
-  </header>
+  </div>
 
   <div class="layout">
     <nav id="toc" class="toc" aria-label="Sections">
-      <p class="toc-title" id="toc-title">Topics</p>
+      <p class="toc-title" id="toc-title">Scenarios</p>
       <ol id="toc-list"></ol>
     </nav>
 
