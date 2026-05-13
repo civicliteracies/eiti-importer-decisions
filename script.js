@@ -63,7 +63,7 @@
 
   function applyTech(on) {
     document.body.classList.toggle('show-technical', on);
-    document.querySelectorAll('.view-toggle button[data-tech]').forEach((b) => {
+    document.querySelectorAll('.tech-controls .view-toggle button').forEach((b) => {
       const isOn = (b.dataset.tech === 'show');
       const active = isOn === !!on;
       b.classList.toggle('is-active', active);
@@ -74,7 +74,7 @@
 
   function initTechToggle() {
     applyTech(currentTech());
-    document.querySelectorAll('.view-toggle button[data-tech]').forEach((b) => {
+    document.querySelectorAll('.tech-controls .view-toggle button').forEach((b) => {
       b.addEventListener('click', () => applyTech(b.dataset.tech === 'show'));
     });
   }
@@ -111,7 +111,7 @@
   function applyView(v) {
     if (v !== 'topic' && v !== 'scenario') v = 'scenario';
     try { localStorage.setItem('group-by', v); } catch {}
-    document.querySelectorAll('.view-toggle button').forEach((b) => {
+    document.querySelectorAll('.view-controls .view-toggle button').forEach((b) => {
       const on = b.dataset.view === v;
       b.classList.toggle('is-active', on);
       b.setAttribute('aria-checked', on ? 'true' : 'false');
@@ -127,7 +127,7 @@
 
   function initViewToggle() {
     applyView(currentView());
-    document.querySelectorAll('.view-toggle button').forEach((b) => {
+    document.querySelectorAll('.view-controls .view-toggle button').forEach((b) => {
       b.addEventListener('click', () => applyView(b.dataset.view));
     });
   }
