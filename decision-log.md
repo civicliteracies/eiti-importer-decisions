@@ -104,22 +104,27 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 **Situation:** The parser needs to represent three reasons a cell value is absent: data not available (NV), data not applicable (NA), and field legitimately empty (BLANK).
 
-**Decision:** Three separate StrEnum types in `shared.diagnostics` — `NotAvailable` (NV), `NotApplicable` (NA), `Blank` (BLANK). Each communicates different things and has different pipeline consequences:
-- `NotAvailable` — data gap. Filled by cleaner's `MapToNotAvailableRule`. Produces a Finding visible in UI.
-- `NotApplicable` — structural inapplicability. Set by parser via `@model_validator(mode="before")` cascade. No error.
-- `Blank` — optional by design. Set by parser via field default. No error.
-A field's type signature declares exactly which sentinels it accepts. `NotAvailable` and `NotApplicable` may appear together where real data uses both (e.g., `submitted_data_to_eiti: ResponseOption | NotApplicable | NotAvailable`); the helper's precedence rule resolves which BLANK_CELL_* code applies.
+**Decision:** Three separate sentinel concepts, each with different pipeline consequences:
+- **Not available** (NV) — a data gap. Filled automatically by the cleaner and produces a Finding visible in the UI.
+- **Not applicable** (NA) — the field doesn't apply given other answers in the same record. Set by the parser based on the record's own structure. No error.
+- **Blank** — the field is optional by design. No error.
 
-**Rationale:** Combining NV and NA in one enum meant any field accepting one implicitly accepted the other. Three separate types give precise control: `T | NotAvailable` allows data gaps, `T | NotApplicable` allows dependency-driven absence, `T | Blank` allows optional emptiness.
+Each field declares which of these sentinels it accepts. Some fields accept both NV and NA, where real data legitimately uses both; in that case a precedence rule decides which blank-cell code applies.
+
+**Rationale:** Treating "not available" and "not applicable" as a single value meant any field accepting one implicitly accepted the other, blurring two very different situations. Keeping them separate gives precise control over what each field is allowed to mean when empty: a data gap, a dependency-driven absence, or an optional emptiness.
+
+**Technical detail:** Three `StrEnum` types in `shared.diagnostics` — `NotAvailable`, `NotApplicable`, `Blank`. `NotAvailable` is filled by the cleaner's `MapToNotAvailableRule`; `NotApplicable` is set by parser `@model_validator(mode="before")` cascades; `Blank` is set by field default. Example field signature: `submitted_data_to_eiti: ResponseOption | NotApplicable | NotAvailable`.
 
 ### Why did the tool replace EITI's enum design?
 <!-- scenario: trust-the-data; topic: data-quality-policy -->
 
-**Situation:** `Sector.NOT_APPLICABLE`, `ProjectStatus.NOT_APPLICABLE`, and `ResponseOption.NOT_APPLICABLE`/`NOT_AVAILABLE` mixed categorical values with absence sentinels in the same StrEnum.
+**Situation:** EITI's original schemas mixed real categorical values (sectors, project statuses, response options) with absence sentinels ("Not applicable", "Not available") inside the same enum.
 
-**Decision:** Remove these members from the enums; consumer fields that legitimately accept NA/NV are union-typed with the appropriate sentinel(s) per a per-field audit. `ReportingOption` keeps its NA/NV members because they are semantically valid answers to the metadata-row question, not absence sentinels.
+**Decision:** Remove the absence members from those enums. Fields that legitimately accept NA or NV declare it explicitly in their type, decided per field by an audit. The exception is `ReportingOption`, which keeps its NA/NV members because in that field they are real answers to a metadata question, not absence sentinels.
 
-**Rationale:** `Sector | NotApplicable` is unambiguous; `Sector` containing both real sectors and `Not applicable` was not. Single source of truth: `"Not available"` always parses to `NotAvailable.NV` (except for `ReportingOption` answers, which are intentionally distinct).
+**Rationale:** Mixing categorical values and absence sentinels in one list made it impossible to say what a field actually accepted — "Sector" implicitly included "Not applicable" as if it were a sector. Separating them gives a single, unambiguous source of truth: "Not available" always means a data gap, except in the one field where it is genuinely an answer.
+
+**Technical detail:** Removed `Sector.NOT_APPLICABLE`, `ProjectStatus.NOT_APPLICABLE`, and `ResponseOption.NOT_APPLICABLE`/`NOT_AVAILABLE`. Consumer fields are now union-typed (e.g., `Sector | NotApplicable`).
 
 ### What do field types in the parser communicate?
 <!-- scenario: cross-cutting; topic: data-quality-policy -->
@@ -133,59 +138,67 @@ A field's type signature declares exactly which sentinels it accepts. `NotAvaila
 ### What categories does the parser use to classify fields?
 <!-- scenario: cross-cutting; topic: data-quality-policy -->
 
-**Situation:** Each parser schema field needs a policy for blank cells.
+**Situation:** Every field in the parser's schema needs a policy for what happens when its cell is blank.
 
-**Decision:** Four categories, expressed entirely through the type signature:
-- **Data (blocking)** — `T`. Blank = `BLANK_CELL_BLOCKING` (source must be fixed).
-- **Data (non-blocking)** — `T | NotAvailable`. Blank = `BLANK_CELL` → cleaner fills NV.
-- **Dependent** — `T | NotApplicable`. Cascade pre-fills NA when upstream is absent. Blank when upstream present = `BLANK_CELL_DEPENDENT` (blocking).
-- **Structural NA** — bare `NotApplicable`. Cascade pre-fills NA when cell is None; non-NA strings rejected as `INVALID_DATATYPE` (preserves alignment errors).
-- **Free** — `FreeText` typed alias (`Annotated[str | Blank, BeforeValidator(_none_to_blank)]`) with default `Blank.BLANK`. The `BeforeValidator` coerces explicit `None` from empty cells to `Blank.BLANK`; the default fills missing keys.
+**Decision:** Five categories, each tied to how the field is declared:
+- **Data (blocking)** — blank produces `BLANK_CELL_BLOCKING`; the source file must be fixed.
+- **Data (non-blocking)** — blank produces `BLANK_CELL`; the cleaner fills it with "Not available".
+- **Dependent** — blank produces `BLANK_CELL_DEPENDENT` when the field should have been filled given other answers (blocking). When a dependency makes the field irrelevant, NA is set automatically.
+- **Structural NA** — the field is always "Not applicable"; NA is filled automatically, and any non-NA text is rejected as `INVALID_DATATYPE` to surface alignment errors.
+- **Free** — free text or comments; missing or empty is treated as Blank by design.
 
-**Rationale:** Categories drive the entire sentinel flow — parser behavior, cleaner rules, and UI visibility all derive from the type signature. No per-field flag table needed.
+**Rationale:** Tying these categories to the field declaration itself means parser behavior, cleaner behavior, and UI visibility all flow from one place. There is no separate per-field configuration table to keep in sync.
+
+**Technical detail:** Categories are expressed as Pydantic type signatures: `T` (blocking), `T | NotAvailable` (non-blocking), `T | NotApplicable` (dependent), bare `NotApplicable` (structural NA), `FreeText = Annotated[str | Blank, BeforeValidator(_none_to_blank)]` with default `Blank.BLANK` (free). The `BeforeValidator` coerces explicit `None` to `Blank.BLANK`; the default fills missing keys.
 
 ### Why is a blank data field always treated as missing rather than legitimate?
 <!-- scenario: trust-the-data; topic: data-quality-policy -->
 
-**Situation:** Some data (e.g., ASM employment, investment) is not tracked by all countries.
+**Situation:** Some data — for example ASM employment or investment figures — isn't tracked by every country.
 
-**Decision:** Data fields never use BLANK. A missing data value is always NV (`NotAvailable`), never BLANK (`optional by design`). Only comments and free text use BLANK.
+**Decision:** A blank data field is always recorded as "Not available", never as a legitimate empty. Only comments and free-text fields can be genuinely blank.
 
-**Rationale:** The parser cannot know whether data is absent because the country doesn't track it or because they forgot to report it. That distinction is for the human reviewer to assess in the UI. NV signals "this is a data gap" — whether expected or not — and keeps the auto-fill visible.
+**Rationale:** The tool can't tell the difference between "the country doesn't track this" and "the country forgot to report it" — both look identical on the page. That judgement belongs to a human reviewer in the UI. Recording every blank data cell as a data gap keeps the auto-fill visible and leaves the interpretation to the reviewer.
 
 ### Which blank cells block import and which don't?
 <!-- scenario: fix-problems-before-import; topic: data-quality-policy -->
 
-**Situation:** A blank data cell needs classification — should it block import?
+**Situation:** When a data cell is blank, the tool needs to decide whether the import can proceed or whether the source file has to be corrected first.
 
-**Decision:** Three parser codes derived by `_blank_cell_code_for(model, field_name)` introspection:
-- `BLANK_CELL` (non-blocking) — type union contains `NotAvailable`. Cleaner's `MapToNotAvailableRule` fills with NV automatically.
-- `BLANK_CELL_BLOCKING` — strict `T` (no sentinels). No candidates, no cleaner fill — source-only. User fixes the source file or escalates via FLAGGED.
-- `BLANK_CELL_DEPENDENT` — type union contains `NotApplicable` (and not `NotAvailable`). Parser puts `'Not applicable'` in candidates (extracted from the Pydantic enum error on the union), so the user picks NA via the review dropdown, fills real data, or escalates via FLAGGED.
+**Decision:** Three codes, chosen from how the field is declared:
+- **BLANK_CELL** (non-blocking) — the field allows "Not available". The cleaner fills it automatically.
+- **BLANK_CELL_BLOCKING** — the field requires a real value. There's nothing to auto-fill; the user fixes the source file or escalates via FLAGGED.
+- **BLANK_CELL_DEPENDENT** — the field allows "Not applicable" but not "Not available". The user picks "Not applicable" from the review dropdown, fills a real value, or escalates via FLAGGED.
 
-When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins by precedence (treats blank as data gap by default; reviewer can override via the review dropdown).
+When a field allows both "Not available" and "Not applicable", BLANK_CELL wins: the blank is treated as a data gap by default, and the reviewer can override that in the UI.
 
-**Rationale:** Blocking is a domain decision encoded in the type. Making it explicit in the Finding code lets the UI present it without needing domain knowledge. The cleaner respects the field-type contract — it does not override strict types or auto-pick between NA/NV when the field declares both as alternatives.
+**Rationale:** Whether a blank blocks import is a domain decision — some fields genuinely require an answer, others have a sensible default. Making that decision explicit in the Finding code lets the UI present it without re-deriving the domain rules. The cleaner only auto-fills where the field's declared shape permits it, and never guesses between NA and NV when both are valid.
+
+**Technical detail:** Codes are derived by `_blank_cell_code_for(model, field_name)` via introspection of the field's type union. For `BLANK_CELL_DEPENDENT`, the parser extracts `'Not applicable'` from the Pydantic enum error on the union and puts it in the review candidates.
 
 ### How does the tool distinguish a blank cell from a wrongly-typed value?
 <!-- scenario: fix-problems-before-import; topic: data-quality-policy -->
 
-**Situation:** A cell fails validation. What parser code should it get?
+**Situation:** A cell fails validation. The tool needs to record what kind of failure it was.
 
-**Decision:** Two distinct paths based on cell content:
-- Cell is None (whitespace-only normalized to None upstream) → `BLANK_CELL_*` derived from type via `_blank_cell_code_for`.
-- Cell has a non-None value but wrong type → `INVALID_DATATYPE` (existing). Cleaner may fuzzy-fix (`EnumCorrectionRule`), standardize (`StandardizeNotAvailableRule` / `StandardizeNotApplicableRule`), or remove (`PlaceholderRemovalRule`).
+**Decision:** Two distinct paths:
+- The cell is empty (or contains only whitespace, which is normalised to empty) — recorded as one of the blank-cell codes, chosen by the field's declared shape.
+- The cell has a value, but the value doesn't fit the field — recorded as `INVALID_DATATYPE`. The cleaner may then fuzzy-match it, standardise an alternate spelling of "Not available" or "Not applicable", or remove a known placeholder.
 
-**Rationale:** Blank cells and wrong-type cells have different error semantics, different cleaner rules, and different reviewer actions. Distinct codes make this explicit.
+**Rationale:** Empty cells and wrongly-filled cells have different causes, are fixed by different cleaner rules, and need different reviewer actions. Giving them distinct codes makes that visible all the way through the pipeline.
+
+**Technical detail:** Blank path goes through `_blank_cell_code_for`. Wrong-type path is handled by `EnumCorrectionRule`, `StandardizeNotAvailableRule`, `StandardizeNotApplicableRule`, and `PlaceholderRemovalRule`.
 
 ### Who decides whether a blank cell becomes 'Not applicable' or 'Not available'?
 <!-- scenario: cross-cutting; topic: data-quality-policy -->
 
-**Situation:** A cell is blank. Who decides whether it becomes NV or NA?
+**Situation:** A cell is blank. Something has to decide whether it should be recorded as "Not available" or "Not applicable".
 
-**Decision:** The parser sets NA via `@model_validator(mode="before")` cascade when a dependency makes the field irrelevant (domain knowledge). The cleaner fills NV for `BLANK_CELL` findings (no domain knowledge needed). The cleaner never sets NA.
+**Decision:** The parser sets "Not applicable" when another answer in the same record makes the field irrelevant — that takes domain knowledge. The cleaner fills "Not available" for non-blocking blank cells — that doesn't. The cleaner never sets "Not applicable".
 
-**Rationale:** NA requires understanding *why* a field is empty (e.g., in-kind volume is NA when payment isn't in-kind). Only the parser has this domain knowledge. The cleaner's rule is simple: non-blocking blank cell = NV.
+**Rationale:** Marking a field as "Not applicable" requires understanding *why* it's empty — for instance, an in-kind volume field is "Not applicable" when the payment wasn't in-kind. Only the parser, which sees the whole record, has that information. The cleaner's job is much simpler: a non-blocking blank means "Not available".
+
+**Technical detail:** Parser sets NA via `@model_validator(mode="before")` cascades. Cleaner fills NV via `MapToNotAvailableRule`.
 
 ---
 
@@ -295,29 +308,37 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Situation:** V1 files never include an exchange rate in the About sheet, but EITI's own API export has rates for 96% of historical declarations.
 
-**Decision:** A committed JSON file (`v1_exchange_rates.json`, extracted from the EITI API export) provides fallback rates keyed by `{iso3}_{year}`. When a v1 file's About sheet has no rate, `compute_stats` looks up the rate from the JSON using `country_iso3` + `end_date` year. Both Python and JS receive the rates via the `/stats-config` endpoint.
+**Decision:** The tool ships with a committed lookup table of historical exchange rates, extracted from EITI's API export and keyed by country and year. When a v1 file's About sheet has no rate, the stats computation looks up the rate by the file's country code and reporting-period end year. The dashboard (in the browser) and the server-side computation read from the same lookup source.
 
-**Rationale:** Historical exchange rates are stable and available from EITI's own data. A static JSON avoids runtime dependency on external services. Both language implementations read the same source, preventing drift.
+**Rationale:** Historical exchange rates are stable and available from EITI's own data. A static, committed table avoids runtime dependency on external services and guarantees that the dashboard and the server can't drift apart.
+
+**Technical detail:** Lookup file `v1_exchange_rates.json`, keyed by `{iso3}_{year}`. `compute_stats` resolves the rate using `country_iso3` + `end_date` year. The same JSON is served to the browser via the `/stats-config` endpoint, so Python and JS share one source.
 
 ### How does the tool convert v1 rows to USD in the dashboard vs the database?
 <!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
-**Situation:** V1 files lack exchange rates. USD values are needed both in the dashboard (UI) and in the database views (datasette).
+**Situation:** V1 files lack exchange rates. USD values are needed both in the dashboard (UI) and in the queryable database views.
 
-**Decision:** Two independent mechanisms:
-- **UI path**: `compute_stats` (stats.py / stats.js) uses a runtime fallback from `v1_exchange_rates.json` — works for any v1 file at any time, even without importing.
-- **DB path**: SQL views (`view_payments_detailed`, `view_revenues_detailed`) read `exchange_rate_used` from `metadata_summary_data_files`. For v1 files, this column is populated by a one-time backfill script (`scripts/backfill_v1_exchange_rates.py`) after import.
+**Decision:** Two independent mechanisms handle USD conversion for v1 files:
+- **Dashboard path**: the stats computation applies the fallback rate at display time, so any v1 file shows USD values immediately, even before it has been imported.
+- **Database path**: the SQL views read a per-file stored exchange rate from the imported metadata. For v1 files, that stored rate is filled in by a one-time backfill run after import.
 
-**Rationale:** The mapper is not touched — adding a v1-specific branch to the hot path for a one-time historical import is not justified. The backfill script is idempotent and isolated. Both paths read from the same `v1_exchange_rates.json` source.
+Both paths read their rate from the same committed lookup table, so the dashboard and the database agree.
+
+**Rationale:** The main import pipeline stays untouched — adding a v1-specific branch to the hot path for a one-time historical conversion isn't justified. The backfill is idempotent and isolated to the files that need it. Because both paths share the same rate source, the dashboard preview and the post-import database give the same USD numbers.
+
+**Technical detail:** Dashboard path: `compute_stats` in `stats.py` / `stats.js` reads `v1_exchange_rates.json` at runtime. DB path: `view_payments_detailed` and `view_revenues_detailed` read `exchange_rate_used` from `metadata_summary_data_files`; that column is populated by `scripts/backfill_v1_exchange_rates.py` post-import.
 
 ### Why are SQL views recreated at startup?
 <!-- scenario: cross-cutting; topic: currency-financial-calculations -->
 
 **Situation:** View definitions may change between releases.
 
-**Decision:** `init_target_db()` runs `DROP VIEW IF EXISTS` + `CREATE VIEW` at startup.
+**Decision:** Every time the API starts, it drops the existing SQL views and recreates them from the current code.
 
-**Rationale:** `CREATE VIEW IF NOT EXISTS` silently keeps the old definition when the SQL changes. Drop+create ensures the view always matches the code.
+**Rationale:** The "create only if missing" variant silently keeps the old definition when the SQL changes, so a release that updates a view would have no effect until the database was wiped. Drop-and-recreate guarantees the views in the database always match the code that's running.
+
+**Technical detail:** `init_target_db()` issues `DROP VIEW IF EXISTS` followed by `CREATE VIEW` for each view on startup.
 
 ### Which currency does the v1 dashboard prioritize?
 <!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
@@ -400,18 +421,22 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Situation:** The Web UI offers a "Restart session" button in the header and a "Cancel & Start Over" button in the template-confirmation modal.
 
-**Decision:** Both call `POST /sessions/{id}/kill`. The session is written as `CANCELLED` (a terminal state), the cached PipelineContext is deleted, and the user returns to the upload zone. There is no undo. The same applies at batch level: `POST /batches/{id}/kill` cancels every non-terminal member of the batch in one transaction.
+**Decision:** Both buttons cancel the current session outright. The session is marked CANCELLED (a terminal state), any in-memory work for it is discarded, and the user returns to the upload zone. There is no undo. The same applies at batch level: cancelling a batch cancels every non-terminal member of the batch in one transaction.
 
-**Rationale:** "Restart" matches the user's mental model — start over from scratch. The underlying mechanism is destructive cancellation, not preservation. Cancellation is what releases the file-content hash dedup slot immediately, removes the session from the recovery sweep's attention, and frees the cache row.
+**Rationale:** "Restart" matches the user's mental model — start over from scratch. The underlying mechanism is destructive cancellation, not preservation. Cancelling immediately releases the duplicate-file lock on that file's contents, takes the session out of the background recovery sweep's attention, and frees the cached working state.
+
+**Technical detail:** Both buttons call `POST /sessions/{id}/kill`; the cached `PipelineContext` for the session is deleted. The batch-level equivalent is `POST /batches/{id}/kill`.
 
 ### Can a batch be confirmed if some members are still under review?
 <!-- scenario: submit-a-report; topic: workflow-status -->
 
-**Situation:** The user clicks "Confirm batch" on a batch whose members are in mixed states (some at CONFIRMING, some still in REVIEWING, some in ERROR_DATA).
+**Situation:** The user clicks "Confirm batch" on a batch whose members are in mixed states — some ready to confirm, some still under review, some in a data-error state.
 
-**Decision:** `POST /batches/{id}/confirm` returns 409 unless every member is in a decided state (CONFIRMING, CONFIRMED, IMPORTED, REJECTED, ERROR_DATA, ERROR_UNKNOWN, CANCELLED). Once all are decided, CONFIRMED is written atomically for the CONFIRMING subset; members already in terminal states are left alone. The Web UI mirrors this by disabling "Confirm batch" until every member is decided.
+**Decision:** The bulk-confirm action is rejected unless every member of the batch has reached a decided state (ready-to-confirm, already confirmed, already imported, rejected, in a data error, in an unknown error, or cancelled). Once all members are decided, the bulk-confirm atomically promotes the ready-to-confirm subset to CONFIRMED and leaves members already in terminal states alone. The Web UI mirrors this by disabling the "Confirm batch" button until every member is decided.
 
-**Rationale:** Each batch member is an independent declaration — no business-data atomicity is required across them. But forcing per-member decisions before bulk confirm prevents partial-state surprises: the user must explicitly resolve each file (approve at review or reject) before bulk-committing the approved subset.
+**Rationale:** Each batch member is an independent declaration — there's no business reason to require all-or-nothing atomicity across them. But forcing per-member decisions before a bulk confirm prevents partial-state surprises: the user must explicitly resolve each file (approve at review or reject it) before bulk-committing the approved subset.
+
+**Technical detail:** `POST /batches/{id}/confirm` returns 409 if any member is not in {CONFIRMING, CONFIRMED, IMPORTED, REJECTED, ERROR_DATA, ERROR_UNKNOWN, CANCELLED}. On success, only the CONFIRMING subset transitions to CONFIRMED.
 
 ---
 
@@ -523,23 +548,25 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 ### What does the tool treat as a single submission for duplicate detection?
 <!-- scenario: avoid-duplicate-imports; topic: entity-resolution -->
 
-**Situation:** A file is identified. The system checks the target DB for prior imports.
+**Situation:** A file is uploaded. The tool checks whether its contents have been imported before.
 
-**Decision:** Detection is per-cohort, not per-file. Each `SubmissionDefinition` declares a `cohort_schema` that enumerates the cohorts the file contains. SDF declares a single `(country_iso3, year)` cohort. Fat-file submissions (validation data, company assessment, API extracts) declare N cohorts per file. DetectorService emits one COHORT_DETECTED finding per cohort and classifies each NEW or DUPE against the target DB.
+**Decision:** Duplicate detection runs per cohort, not per file. Each submission type declares which cohorts it contains: an SDF file holds one cohort (one country, one year), while fat-file submissions (validation data, company assessment, API extracts) hold many cohorts in a single file. The detector emits one COHORT_DETECTED finding per cohort and classifies each one as NEW or DUPE against what's already in the database.
 
-**Rationale:** A fat file with 50 country-years may have 48 new cohorts and 2 already imported. Per-file dedup would force the user to delete the prior 2 (or rebuild the file without them) before importing. Per-cohort dedup lets them import only the new cohorts and decide explicitly what to do with the duplicates.
+**Rationale:** A fat file covering 50 country-years might have 48 cohorts the database has never seen and 2 that were already imported. Treating the whole file as one unit would force the user to either delete the two prior imports or rebuild the file without them before they could proceed. Classifying cohort-by-cohort lets the user import the 48 new ones and decide explicitly what to do with the overlapping 2.
+
+**Technical detail:** Each `SubmissionDefinition` declares a `cohort_schema` enumerating the cohorts the file contains. `DetectorService` emits the COHORT_DETECTED findings and runs the NEW/DUPE classification.
 
 ### What happens when the user uploads a file that's already imported?
 <!-- scenario: avoid-duplicate-imports; topic: entity-resolution -->
 
-**Situation:** DetectorService classifies every declared cohort against the target DB.
+**Situation:** The detector has classified every cohort declared by the file against what's already in the database.
 
 **Decision:**
-- Every cohort DUPE → terminal `DUPLICATE_SUBMISSION` finding → ERROR.DATA. The user must explicitly delete the prior import(s) and re-upload if they want to proceed.
-- Mixed NEW + DUPE, or multiple NEW cohorts → SELECTION_CONFIRMING interrupt. The user picks which cohorts to import.
-- Exactly one NEW + zero DUPE → continue silently.
+- Every cohort is a DUPE: the run ends with a terminal DUPLICATE_SUBMISSION finding and ERROR_DATA status. The user must explicitly delete the prior import(s) and re-upload to proceed.
+- A mix of NEW and DUPE cohorts, or several NEW cohorts: the run pauses at the SELECTION_CONFIRMING interrupt so the user can pick which cohorts to import.
+- Exactly one NEW cohort and no DUPEs: the run continues silently.
 
-**Rationale:** All-DUPE means the user likely uploaded the wrong file or forgot a prior import was already there — fail loud rather than silently overwriting. Mixed cases need human judgment because the answer depends on what the user intended (re-import a corrected version? skip the duplicates? cancel?). Silent continue is reserved for the unambiguous SDF happy path.
+**Rationale:** All-DUPE usually means the user uploaded the wrong file or forgot a prior import existed — better to fail loudly than to silently overwrite. Mixed cases need a human decision because the right answer depends on intent: re-import a corrected version, skip the duplicates, or cancel entirely. Silent continuation is reserved for the unambiguous happy path of a single new declaration.
 
 ### Why doesn't the tool guess on close matches?
 <!-- scenario: trust-the-data; topic: entity-resolution -->
@@ -622,18 +649,22 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Situation:** Excel files include "Total in [currency]" rows that contain pre-computed sums.
 
-**Decision:** Extract totals as regular data rows via `KVP_SCAN`, then crosscheck against computed sums from the corresponding data table with a tolerance of 1.0 currency unit.
+**Decision:** The tool extracts each "Total" row as regular data alongside the rest of the sheet, then cross-checks it against the sum it independently computes from the corresponding data table. A difference of up to 1.0 currency unit is accepted; anything larger is flagged as a discrepancy.
 
-**Rationale:** Excel SUMIF rounding produces sub-cent drift. A tolerance of 1.0 absorbs this without masking genuine discrepancies.
+**Rationale:** Excel's SUMIF rounding produces sub-cent drift between the pre-computed totals and a fresh sum. A one-currency-unit tolerance absorbs that drift without masking genuine inconsistencies in the file.
+
+**Technical detail:** Totals are pulled via the `KVP_SCAN` extractor and compared in the totals crosscheck step.
 
 ### How does the totals check work across different submission types?
 <!-- scenario: cross-cutting; topic: consistency-rules -->
 
 **Situation:** Different submission types have different table names, field names, and grouping semantics for the totals comparison.
 
-**Decision:** `TotalsSpec` dataclass config defined per `SubmissionConfig` profile in `crosscheck_totals`. Each spec declares the data table, totals table, value fields, group-by field, and mismatch code.
+**Decision:** Each submission type declares, in its profile, how its totals check works: which data table holds the rows, which table holds the pre-computed totals, which fields carry the values, which field groups them, and which finding code to raise on a mismatch. The check logic itself is shared and reads only those declarations.
 
-**Rationale:** Adding a new submission type means config entries, not code. The check logic is format-agnostic by design — it operates on the `extracted_data` contract, not the source format.
+**Rationale:** Adding a new submission type means adding configuration entries, not writing new check code. The check is format-agnostic by design — it operates on the tool's normalized extracted-data shape, not on the original spreadsheet layout, so it doesn't care whether a new type is structurally similar to the existing ones.
+
+**Technical detail:** Per-type config lives in `crosscheck_totals` on the `SubmissionConfig` profile; each entry is a `TotalsSpec` dataclass declaring data table, totals table, value fields, group-by field, and mismatch finding code. The shared check operates on the `extracted_data` contract.
 
 ---
 
@@ -705,51 +736,61 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 ### What kinds of duplicate uploads does the tool catch?
 <!-- scenario: avoid-duplicate-imports; topic: import-behavior -->
 
-**Situation:** An user uploads a file that may have been imported before.
+**Situation:** A user uploads a file that may have been imported before.
 
 **Decision:** Three layers run in sequence, each catching a different failure shape:
 
-- **Layer 1 — file-content hash at upload.** SHA-256 of the upload bytes is checked against prior successful imports. A match rejects the upload with 409. Catches "same file uploaded twice."
-- **Layer 2 — cohort classification at identification.** The detector enumerates the cohorts the file contains (one for SDF, N for fat files) via the submission's `cohort_schema`. Each cohort is checked against the active declaration registry. All-DUPE terminates with ERROR.DATA; mixed NEW/DUPE routes to the SELECTION_CONFIRMING interrupt. Catches "different file claiming the same identity" and "fat file overlapping with prior imports."
-- **Layer 3 — file-content hash at confirmation.** The hash is re-checked against both committed imports AND active in-flight sibling sessions before the importer commits. A match rejects with 409. Catches the race where two users upload identical content simultaneously and both pass Layer 1.
+- **Layer 1 — file-content hash at upload.** A fingerprint of the uploaded bytes is compared against prior successful imports. A match rejects the upload with a 409 response. Catches "same file uploaded twice."
+- **Layer 2 — cohort classification at identification.** The detector enumerates the cohorts the file contains (one for SDF, many for fat files) and checks each against the registry of active declarations. All-DUPE terminates the run with ERROR_DATA; a mix of NEW and DUPE routes to the SELECTION_CONFIRMING interrupt so the user can choose. Catches "different file claiming the same identity" and "fat file overlapping with prior imports."
+- **Layer 3 — file-content hash at confirmation.** The fingerprint is re-checked against both committed imports and active in-flight sibling sessions just before the importer commits. A match rejects with 409. Catches the race where two users upload identical content at the same time and both pass Layer 1.
 
-**Rationale:** Each layer has a different blast radius. Layer 1 is cheapest, catches the common case, runs before any pipeline work begins. Layer 2 handles the semantic "I edited the file but it's still the same declaration" case. Layer 3 is structural, vanishingly rare in a single-user team, but closes the TOCTOU window that the other two cannot.
+**Rationale:** Each layer has a different blast radius. Layer 1 is the cheapest check and catches the common case before any pipeline work begins. Layer 2 handles the semantic case — the file was edited but still represents the same declaration. Layer 3 is structural; it's vanishingly rare on a single-user team, but it closes a timing window the other two layers cannot.
+
+**Technical detail:** Layer 1 and Layer 3 use SHA-256 over the upload bytes. Layer 2 is driven by the submission's `cohort_schema`.
 
 ### Can the user re-upload the same file after deleting the prior import?
 <!-- scenario: avoid-duplicate-imports; topic: import-behavior -->
 
-**Situation:** An user deleted a declaration and re-uploads the same file (identical bytes).
+**Situation:** A user deleted a declaration and re-uploads the same file (identical bytes).
 
-**Decision:** Soft-deleted prior imports do NOT block the upload — the hash check looks only for active declarations (`is_deleted = 0`).
+**Decision:** A soft-deleted prior import does not block the new upload. The duplicate check only looks at declarations that are currently active.
 
-**Rationale:** Deletion is the user's "let me try again" signal. Permanent blocking would defeat the user flow.
+**Rationale:** Deletion is the user's "let me try again" signal. Permanent blocking would defeat that flow.
+
+**Technical detail:** The hash lookup filters on `is_deleted = 0`.
 
 ### Can the user retry the same file after an import failure?
 <!-- scenario: avoid-duplicate-imports; topic: import-behavior -->
 
-**Situation:** An user's prior upload of the same file failed mid-import (status != success).
+**Situation:** A user's earlier attempt to import the same file failed partway through.
 
-**Decision:** The hash check filters on `status = success` only. Failed imports are invisible to dedup.
+**Decision:** Only successful imports count toward the duplicate check. Failed imports are invisible to it, so the user can retry the same file directly.
 
-**Rationale:** Retries of failed work are the legitimate next step. Blocking them would force the user to mutate the file just to bypass the check.
+**Rationale:** Retrying after a failure is a legitimate next step. Blocking it would force the user to mutate the file just to get past the check.
+
+**Technical detail:** The hash lookup filters on `status = success`.
 
 ### When is duplicate detection by file hash skipped?
 <!-- scenario: operate-at-scale; topic: import-behavior -->
 
-**Situation:** A developer iterates on a fixture file on their laptop, repeatedly re-uploading.
+**Situation:** A developer iterates on a fixture file on their laptop, repeatedly re-uploading it.
 
-**Decision:** `Settings.dedup_uploads_by_hash` is False in the LOCAL profile and True in every other environment (DEV, TEST, STAGING, PROD). There is no request-header bypass.
+**Decision:** Hash-based duplicate detection is disabled in the LOCAL profile and enabled in every other environment (DEV, TEST, STAGING, PROD). There is no per-request bypass — callers cannot turn it off.
 
-**Rationale:** Dev iteration without bypass forces `mise run db:reset` between every test upload — friction with no integrity benefit at a single-developer machine. Server environments enforce dedup uniformly; no caller can disable it.
+**Rationale:** On a developer's machine, dedup just creates friction: every test upload would need a database reset first, with no integrity benefit at a single-developer workstation. Server environments enforce dedup uniformly so no caller can quietly disable it.
+
+**Technical detail:** Controlled by `Settings.dedup_uploads_by_hash`.
 
 ### What happens when a colleague's stuck session blocks the user from confirming a file?
 <!-- scenario: avoid-duplicate-imports; topic: import-behavior -->
 
-**Situation:** User B uploads a file whose SHA-256 matches an in-flight session held by User A (who walked away mid-flow). Without intervention, User B is blocked from confirming until User A's session TTL expires (hours to days).
+**Situation:** User B uploads a file whose contents match an in-flight session that User A started and walked away from. Without intervention, User B is blocked from confirming until User A's session expires, which can take hours or days.
 
-**Decision:** 409 responses at upload time and at confirmation time include `sibling_session_ids`, `sibling_batch_id` (if applicable), and a structured `release_action(s)` field naming the kill endpoint the caller can invoke to release the dedup slot immediately. The Web UI surfaces this as a "Cancel that session and retry" modal action; the CLI prompts via `questionary`.
+**Decision:** The 409 responses returned at upload and at confirmation include the IDs of the blocking sibling session (and its batch, if it has one), plus a structured release action that names the endpoint the caller can hit to cancel the stuck session and free the slot immediately. The Web UI surfaces this as a "Cancel that session and retry" modal action; the CLI surfaces it as an interactive prompt.
 
-**Rationale:** Without the release path, the only unblock is TTL — operationally unacceptable when an abandoned session blocks a colleague's legitimate work. Activity-based auto-release (heartbeat-tracked idle sessions auto-yielding their slot) is deferred to MVP6 because it needs activity-tracking infrastructure and an auth model. Until then, the explicit release action makes the workaround discoverable to anyone who hits the collision.
+**Rationale:** Without an explicit release path, the only way to unblock is to wait for the session to time out — operationally unacceptable when an abandoned session is blocking a colleague's legitimate work. A smarter approach (idle sessions yielding their slot automatically based on activity tracking) needs infrastructure that doesn't exist yet, so it's deferred. Until then, the release action makes the workaround discoverable to anyone who runs into a collision.
+
+**Technical detail:** The 409 payload carries `sibling_session_ids`, `sibling_batch_id`, and `release_action(s)`. The CLI prompt uses the `questionary` library. Activity-based auto-release is deferred to MVP6.
 
 ---
 
@@ -832,18 +873,22 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Situation:** V1 templates render the GFS taxonomy as visual indent in revenue rows. Parent rows like `('11E', 'Taxes', None, None, None, None)` reach the parser as candidate data rows alongside real data rows.
 
-**Decision:** `BaseTableSchema.row_filter` (a `Callable[[dict], bool] | None`) lets schemas reject rows after extraction but before validation. `GOV_REVENUE_SCHEMA_V1` declares `row_filter=_is_v1_revenue_data_row`, which keeps a row only if at least one country-supplied field is populated.
+**Decision:** Schemas can declare a row filter that rejects rows after extraction but before validation. The v1 government revenue schema uses one that keeps a row only if at least one country-supplied field is populated. v2.x schemas don't need a filter; their data is already flat.
 
-**Rationale:** Without the filter, the sentinel-only typing would generate ~50 spurious `BLANK_CELL` findings per file from parent rows whose blanks are structural, not country gaps. The principled placement is on `BaseTableSchema` (not `HeaderSearchSchema`) because the policy generalises — any future schema can declare a row filter. Row-iterating readers (`TableReader`, `PivotTableReader`) call `schema.row_filter` directly, no `getattr` duck-typing. v2.x schemas leave it `None`; their data is already flat.
+**Rationale:** Without the filter, parent rows whose blanks are structural (not country gaps) would generate roughly 50 spurious BLANK_CELL findings per file. Placing the row-filter hook at the base schema level means any future schema can opt in without special-casing.
+
+**Technical detail:** The hook is `BaseTableSchema.row_filter: Callable[[dict], bool] | None`. `GOV_REVENUE_SCHEMA_V1` sets `row_filter=_is_v1_revenue_data_row`. Row-iterating readers (`TableReader`, `PivotTableReader`) call `schema.row_filter` directly rather than relying on `getattr` duck-typing.
 
 ### How does the tool distinguish country-supplied fields from template-supplied labels in v1?
 <!-- scenario: compare-across-versions; topic: version-differences -->
 
-**Situation:** The sentinel-only typing (ADR-009) is extended to v1 schemas.
+**Situation:** The sentinel-only typing approach (ADR-009) is being extended to v1 schemas, but v1 templates predate the "every cell required" design and mix country-supplied data fields with template-side label fields in the same row.
 
-**Decision:** Country-supplied fields type as `T | NotAvailable` (blanks produce `BLANK_CELL` findings, cleaner backfills `NotAvailable.NV`). Template-supplied row labels and ditto-pattern fields type as `FreeText` (`Annotated[str | Blank, BeforeValidator(_none_to_blank)]` — None silently coerces to `Blank.BLANK`).
+**Decision:** Country-supplied fields are typed so that blanks produce BLANK_CELL findings and the cleaner backfills "Not available." Template-supplied row labels and ditto-pattern fields are treated as free text — a missing value silently becomes a blank sentinel rather than a finding. The split is decided per field by asking "is this cell the country's responsibility, or pre-filled by the template?"
 
-**Rationale:** v1 templates predate the standardised "every cell required" design and have a structural mix of country-supplied data fields and template-side label fields. Treating both as the same erases real gaps (with `Blank` everywhere) or generates noise (with `NotAvailable` everywhere). The split is decided per field by asking "is this cell the country's responsibility, or pre-filled by the template?"
+**Rationale:** Treating both kinds of cell the same way either erases real country gaps (if blanks are always silent) or generates noise on structural blanks the country never owned (if blanks are always findings). Splitting them per field preserves the strict-typing philosophy where it applies and stays quiet where it doesn't.
+
+**Technical detail:** Country-supplied fields type as `T | NotAvailable`. Template-supplied fields type as `FreeText` — `Annotated[str | Blank, BeforeValidator(_none_to_blank)]`, where `_none_to_blank` coerces `None` to `Blank.BLANK`.
 
 ---
 
@@ -917,69 +962,77 @@ When both `NotAvailable` and `NotApplicable` are in the union, `BLANK_CELL` wins
 
 **Situation:** Multiple layers need to control what the pipeline does — the submission type defines version-specific rules, but the client (API, CLI, batch) may need to override which services run or what dependencies they use.
 
-**Decision:** Three-tier priority model. Service defaults are the fallback. Submission type config (per-service dicts keyed by SubmissionID) overrides defaults. Client instructions (factory skip flags + DI parameters) override everything.
+**Decision:** A three-tier priority model. Service defaults are the fallback. Per-submission-type configuration overrides defaults. Client instructions (skip flags and injected dependencies) override everything.
 
-**Rationale:** Keeps the pipeline linear and predictable while allowing both data-driven customization (submission type) and user-driven customization (client mode).
+**Rationale:** Keeps the pipeline linear and predictable while allowing both data-driven customization (per submission type) and user-driven customization (per client mode).
 
 ### Why is per-submission-type config spread across services rather than centralized?
 <!-- scenario: cross-cutting; topic: cross-cutting -->
 
-**Situation:** Each service maintains its own config dict keyed by SubmissionID. Adding a new submission type requires touching 6+ files.
+**Situation:** Each service maintains its own configuration dictionary keyed by submission ID. Adding a new submission type requires touching six or more files.
 
-**Decision:** Keep the scattered approach for now. Centralize into a SubmissionProfile when submission types grow beyond 3-4. Exhaustiveness test guards against missing entries.
+**Decision:** Keep the scattered approach for now. Centralize into a single submission-profile object when submission types grow beyond three or four. An exhaustiveness test guards against missing entries in the meantime.
 
-**Rationale:** Scattered dicts are pragmatic for 3 types. Centralization is the right long-term architecture but a significant refactor.
+**Rationale:** Scattered dictionaries are pragmatic for three types. Centralization is the right long-term architecture but a significant refactor that isn't yet justified.
 
 ### Why are entity resolution and ID assignment split into two services?
 <!-- scenario: cross-cutting; topic: cross-cutting -->
 
 **Situation:** Entity resolution needs two steps — resolve names to database IDs, then assign fresh IDs to unresolved names. Both could live in one service.
 
-**Decision:** The enricher resolves (runs before the REVIEWING interrupt). The mapper assigns fresh UUIDs (runs after the REVIEWING interrupt).
+**Decision:** The enricher resolves names against existing records before the review interrupt. The mapper assigns fresh IDs to anything still unresolved after the review interrupt.
 
-**Rationale:** User corrections at the review interrupt can change entity names. ID assignment must happen after corrections are final. If the enricher assigned IDs before review, corrections would invalidate already-issued IDs with no mechanism to update downstream references.
+**Rationale:** User corrections at the review interrupt can change entity names. ID assignment must happen after corrections are final. If IDs were assigned before review, corrections would invalidate already-issued IDs with no mechanism to update downstream references.
 
 ### Which kinds of blank cells does the cleaner auto-fill?
 <!-- scenario: fix-problems-before-import; topic: cross-cutting -->
 
-**Situation:** The parser distinguishes three blank-cell codes by field type — `BLANK_CELL` (non-blocking, `T | NotAvailable`), `BLANK_CELL_BLOCKING` (strict `T`), `BLANK_CELL_DEPENDENT` (`T | NotApplicable` with upstream present). Earlier draft of this PR auto-filled all three; reverted because strict types declare a hard contract.
+**Situation:** The parser distinguishes three blank-cell codes by field type: BLANK_CELL (non-blocking, the field accepts "Not available"), BLANK_CELL_BLOCKING (strict — no sentinel allowed), and BLANK_CELL_DEPENDENT (the field accepts "Not applicable" but only when an upstream field is populated). An earlier draft auto-filled all three.
 
-**Decision:** Cleaner only fills `BLANK_CELL`. `BLANK_CELL_BLOCKING` is source-only — the field type explicitly disallows sentinels, so the user must fix the source. `BLANK_CELL_DEPENDENT` is dropdown-fixable — the parser puts `'Not applicable'` in the finding's candidates (extracted from the Pydantic enum error on the `T | NotApplicable` union), so the user picks NA via review, or fills real data, or escalates via FLAGGED.
+**Decision:** The cleaner only fills BLANK_CELL. BLANK_CELL_BLOCKING is source-only — the field type explicitly disallows sentinels, so the user must fix the source. BLANK_CELL_DEPENDENT is dropdown-fixable — the parser offers "Not applicable" as a candidate, and the user either picks it via review, fills real data, or escalates via FLAGGED.
 
-**Rationale:** Auto-filling NV on a strict-typed field would lie about the contract. The whole point of declaring `revenue_value: float` (no sentinel) is to require real data. The cleaner respects the field-type semantics; the user makes the call for ambiguous cases via review or FLAGGED escalation.
+**Rationale:** Auto-filling "Not available" on a strict-typed field would lie about the contract. The whole point of declaring a field as requiring a real value is to require real data. The cleaner respects field-type semantics; the user makes the call for ambiguous cases via review or FLAGGED escalation.
+
+**Technical detail:** "Not applicable" candidates are extracted from the validator's enum error on the `T | NotApplicable` union and attached to the finding.
 
 ### What does the tool require before letting the user move past review?
 <!-- scenario: fix-problems-before-import; topic: cross-cutting -->
 
-**Situation:** Pre-PR gate excluded findings with candidates from "unfixable." That meant a `BLANK_CELL_DEPENDENT` carrying `candidates=('Not applicable',)` passed the gate without the user actually picking — and the row got written with NULL into a nullable column.
+**Situation:** The original gate excluded any finding with candidates from "unfixable." That meant a BLANK_CELL_DEPENDENT carrying "Not applicable" as a candidate passed the gate without the user actually picking — and the row got written with NULL into a nullable column.
 
-**Decision:** The gate now requires every VALIDATION finding (without its own `proposed_value`) to be COVERED — either by a `CLEANING` finding with `proposed_value` at the same coords, or by a `USER_CHOICE` correction submitted via the request body or already in `context.findings`. Findings with candidates but no pick AND no cleaner coverage are unfixable until the user picks.
+**Decision:** The gate now requires every VALIDATION finding (that doesn't carry its own proposed value) to be covered — either by a CLEANING finding with a proposed value at the same coordinates, or by a USER_CHOICE correction submitted via the request body or already recorded for the session. A finding that has candidates but no pick and no cleaner coverage is unfixable until the user picks.
 
-**Rationale:** The "candidates exist therefore fixable" check was a soft promise. Forcing user picks closes the silent-NULL path that previously existed. UX impact: every dropdown-fixable cell becomes a required review action, which matches the strict-typing philosophy.
+**Rationale:** The earlier "candidates exist therefore fixable" check was a soft promise. Forcing user picks closes the silent-NULL path. The UX consequence is that every dropdown-fixable cell becomes a required review action, which matches the strict-typing philosophy.
 
 ### How does the tool guarantee that every imported cell has been mapped?
 <!-- scenario: cross-cutting; topic: cross-cutting -->
 
-**Situation:** Pre-PR, the mapper had two independent paths that could silently write NULL into a data column: a `if val is not None: emit_finding(...)` skip, and the importer's `_coerce_row` None fallback. Combined with nullable DDL, this hid contract violations.
+**Situation:** Previously the mapper had two independent paths that could silently write NULL into a data column: one that skipped emitting a mapping when the value was None, and a None fallback in the importer when coercing a row. Combined with nullable column definitions, this hid contract violations.
 
-**Decision:** Mapper emits CELL_MAPPED for every column on validated rows (no `is not None` skip — though uncovered None values still get a per-cell skip with a comment). Rows with uncovered VALIDATION findings are filtered out entirely (`failed_rows` set) so the importer never sees a partial row. DDL declares NOT NULL on text-shaped `*_col_content` columns. `MissingRequiredFieldError` exists as defense-in-depth in `_coerce_row`, though its branch rarely fires for tightened columns because Phase 8 used `default=""` to keep dataclass instantiation working.
+**Decision:** The mapper emits CELL_MAPPED for every column on validated rows. Rows that still carry uncovered VALIDATION findings are filtered out entirely so the importer never sees a partial row. Text-shaped content columns are declared NOT NULL in the schema. A defensive error type in the importer's row-coercion path catches anything that slips through.
 
-**Rationale:** Closes the silent-NULL path at multiple levels. Numeric `*_col_content: float | None` columns remain nullable; a future typed-storage refactor will address those.
+**Rationale:** Closes the silent-NULL path at multiple levels — at the mapper (no skip), at the row gate (no partial rows reach the importer), and at the DDL (the database refuses NULL on text columns). Numeric content columns remain nullable for now; a future typed-storage refactor will address those.
+
+**Technical detail:** Uncovered None values still get a per-cell skip with a comment. Rows with uncovered findings are tracked in a `failed_rows` set. The defensive `MissingRequiredFieldError` branch in `_coerce_row` rarely fires for tightened columns because dataclass fields kept `default=""` to preserve instantiation.
 
 ### How does the user escalate a finding the tool can't resolve?
 <!-- scenario: fix-problems-before-import; topic: cross-cutting -->
 
-**Situation:** `CorrectionCode.DISMISSED` was reserved for "user dismisses the error, importer keeps going." That bypass is obsolete — under the strict-type design, blanks either become sentinel strings (cleaner-filled or user-picked) or get rejected by the /review gate. There's no "dismiss and keep going" path anymore.
+**Situation:** A "dismissed" feedback code used to mean "user dismisses the error, importer keeps going." That bypass is obsolete — under the strict-type design, blanks either become sentinel strings (cleaner-filled or user-picked) or get rejected by the review gate. There is no "dismiss and keep going" path anymore.
 
-**Decision:** Rename `CorrectionCode` → `FeedbackCode`; `MANUAL_FIX` → `USER_CHOICE`; `DISMISSED` → `FLAGGED`. The DISMISSED bypass at `/review` is removed entirely. FLAGGED gets a meaningful escalation channel via two new endpoints: `POST /session/{id}/flag` (interim, replace-on-POST, doesn't transition state) and `POST /session/{id}/feedback` (terminal, transitions to ERROR_DATA, emits structlog events). Flags persist in `metadata_feedback_flags` (target DB) keyed by session_id.
+**Decision:** Feedback codes are renamed to reflect the new model: a manual-fix code becomes USER_CHOICE, and the dismissal code becomes FLAGGED. The dismiss bypass at the review endpoint is removed entirely. FLAGGED gets a meaningful escalation channel via two new endpoints: an interim flag endpoint (replace-on-POST, doesn't transition session state) and a terminal feedback endpoint (transitions the session to an error-data state, emits structured log events). Flags persist in the target database keyed by session ID.
 
-**Rationale:** Separates iterative editing from terminal abort. Modal can save freely without committing. Survives session abort so the dev team can query flagged findings post-mortem.
+**Rationale:** Separates iterative editing from terminal abort. The user can save flag notes freely without committing the session. Flags survive session abort so the dev team can query flagged findings post-mortem.
+
+**Technical detail:** `CorrectionCode` → `FeedbackCode`; `MANUAL_FIX` → `USER_CHOICE`; `DISMISSED` → `FLAGGED`. Endpoints are `POST /session/{id}/flag` (interim) and `POST /session/{id}/feedback` (terminal). Flag rows live in `metadata_feedback_flags`.
 
 ### How does the tool keep row numbers consistent across the API and the UI?
 <!-- scenario: cross-cutting; topic: cross-cutting -->
 
-**Situation:** The parser emitted `ParsingError.table_row_index = i + 1` (1-indexed) while every other service (enricher, crosschecker, mapper) used `enumerate(rows)` (0-indexed). The mismatch caused user `USER_CHOICE` and cleaner-produced `BLANK_TO_NOT_AVAILABLE` overrides to silently miss in the mapper's `overrides.get((table, row_idx, field))` lookup. Bug uncaught because no integration test exercised override application.
+**Situation:** The parser emitted row indices as 1-indexed while every other service used 0-indexed enumeration. The mismatch caused user picks and cleaner-produced overrides to silently miss in the mapper's override lookup. The bug went uncaught because no integration test exercised override application.
 
-**Decision:** `Finding.table_row_index` is **0-indexed** end-to-end internally. Presentation-layer consumers (CLI, web UI, CSV export, screen-reader labels, text exports) prefer `sheet_row_index` (Excel-absolute, 1-indexed) for display, falling back to `table_row_index + 1`. Helpers: `displayRow(f)` in `apps/web_ui/web-utils.js`, `_display_row(f)` in `apps/cli/src/cli/main.py`.
+**Decision:** Row indices are 0-indexed end-to-end internally. Presentation-layer consumers (CLI, web UI, CSV export, screen-reader labels, text exports) prefer the Excel-absolute (1-indexed) sheet row number for display, falling back to the internal index plus one when the sheet number is unavailable.
 
-**Rationale:** One convention everywhere is cleaner than `+1` patches at every consumer. Tests already constructed findings with `table_row_index=0`, indicating the surrounding code believed the convention was 0-indexed. Migrating the parser fixes the latent override bug as a side effect.
+**Rationale:** One convention everywhere is cleaner than patching `+1` at every consumer. Tests already constructed findings as if the convention were 0-indexed, indicating that's what the surrounding code believed. Migrating the parser fixes the latent override bug as a side effect.
+
+**Technical detail:** Internal field: `Finding.table_row_index` (0-indexed). Display field: `sheet_row_index` (1-indexed, Excel-absolute). Helpers: `displayRow(f)` in `apps/web_ui/web-utils.js`; `_display_row(f)` in `apps/cli/src/cli/main.py`.
