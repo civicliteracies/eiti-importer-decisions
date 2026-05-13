@@ -317,8 +317,12 @@ main code {
   padding: 0.12em 0.4em;
   border-radius: 3px;
   border: 1px solid var(--code-border);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
+
+main p, main dd, .fields dd p { overflow-wrap: anywhere; }
+body { overflow-x: hidden; }
 
 main p code, main li code, main dd code {
   vertical-align: 0.05em;
@@ -359,35 +363,37 @@ main a { color: var(--accent); }
 
 /* Technical detail rows are hidden by default; toggle reveals them. */
 body:not(.show-technical) .field-technical { display: none; }
+
 body.show-technical .fields dt.field-technical {
   color: var(--accent);
-  font-style: italic;
+  background: var(--accent-soft);
+  padding: 0.5em 0.65em 0.5em;
+  border-radius: 4px 0 0 4px;
+  margin-top: 0.35rem;
+}
+body.show-technical .fields dd.field-technical {
+  background: var(--accent-soft);
+  padding: 0.55rem 0.85rem;
+  border-radius: 0 4px 4px 0;
+  margin-top: 0.35rem;
 }
 
-.tech-toggle {
+.tech-controls {
   margin-top: 1.5rem;
-  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
   font-family: var(--sans);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  background: var(--bg-soft);
-  color: var(--fg-muted);
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  padding: 0.5rem 0.75rem;
-  cursor: pointer;
-  text-align: left;
-  transition: color 120ms, border-color 120ms, background 120ms;
+  font-size: 0.82rem;
+  color: var(--fg-subtle);
 }
-.tech-toggle:hover {
-  color: var(--fg);
-  border-color: var(--fg-subtle);
+.tech-controls .view-label {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  font-weight: 600;
 }
-.tech-toggle[aria-pressed="true"] {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: var(--accent);
-}
+.tech-controls .view-toggle { align-self: flex-start; }
 
 /* === Pending callout === */
 

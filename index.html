@@ -36,7 +36,13 @@
     <nav id="toc" class="toc" aria-label="Sections">
       <p class="toc-title" id="toc-title">Scenarios</p>
       <ol id="toc-list"></ol>
-      <button id="tech-toggle" type="button" class="tech-toggle" aria-pressed="false">Show technical detail</button>
+      <div class="tech-controls">
+        <span class="view-label">Technical detail</span>
+        <div class="view-toggle" role="radiogroup" aria-label="Technical detail visibility">
+          <button type="button" data-tech="hide" role="radio" aria-checked="true" class="is-active">Hide</button>
+          <button type="button" data-tech="show" role="radio" aria-checked="false">Show</button>
+        </div>
+      </div>
     </nav>
 
     <main id="content" aria-busy="true">

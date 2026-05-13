@@ -63,18 +63,20 @@
 
   function applyTech(on) {
     document.body.classList.toggle('show-technical', on);
-    const btn = document.getElementById('tech-toggle');
-    if (btn) {
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-      btn.textContent = on ? 'Hide technical detail' : 'Show technical detail';
-    }
+    document.querySelectorAll('.view-toggle button[data-tech]').forEach((b) => {
+      const isOn = (b.dataset.tech === 'show');
+      const active = isOn === !!on;
+      b.classList.toggle('is-active', active);
+      b.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
     try { localStorage.setItem('show-technical', on ? '1' : '0'); } catch {}
   }
 
   function initTechToggle() {
     applyTech(currentTech());
-    const btn = document.getElementById('tech-toggle');
-    if (btn) btn.addEventListener('click', () => applyTech(!currentTech()));
+    document.querySelectorAll('.view-toggle button[data-tech]').forEach((b) => {
+      b.addEventListener('click', () => applyTech(b.dataset.tech === 'show'));
+    });
   }
 
   // === Tabs ===
