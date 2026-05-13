@@ -20,6 +20,19 @@ quickly.
 The site itself (`index.html`, `style.css`, `script.js`) is hand-maintained
 here — only `decision-log.md` is overwritten by the mirror.
 
+## Local preview
+
+Opening `index.html` directly via `file://` will not work — the page fetches
+`decision-log.md` over HTTP, and browsers block `file://` fetches. Serve the
+directory over HTTP instead:
+
+```bash
+python3 -m http.server 8000
+# then open http://localhost:8000/
+```
+
+Any static-file server works (`npx serve`, `caddy file-server`, etc.).
+
 ## License
 
 Content (`decision-log.md`) and site assets are released under

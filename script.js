@@ -54,6 +54,16 @@
   let entries = [];
   let activeObserver = null;
 
+  // Sanitize markdown HTML. DOMPurify is loaded as a sibling script; if it
+  // failed to load (CDN dropped, integrity mismatch, file deleted), we render
+  // a hard error rather than ship raw markdown output to innerHTML.
+  function sanitize(html) {
+    if (typeof window.DOMPurify === 'undefined' || typeof window.DOMPurify.sanitize !== 'function') {
+      throw new Error('DOMPurify not loaded');
+    }
+    return window.DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+  }
+
   // === Technical-detail toggle ===
 
   function currentTech() {
@@ -68,14 +78,52 @@
       const active = isOn === !!on;
       b.classList.toggle('is-active', active);
       b.setAttribute('aria-checked', active ? 'true' : 'false');
+      b.setAttribute('tabindex', active ? '0' : '-1');
     });
-    try { localStorage.setItem('show-technical', on ? '1' : '0'); } catch {}
+    try { localStorage.setItem('show-technical', on ? '1' : '0'); }
+    catch (err) { console.warn('localStorage write failed for show-technical', err); }
   }
 
   function initTechToggle() {
     applyTech(currentTech());
-    document.querySelectorAll('.tech-controls .view-toggle button').forEach((b) => {
+    const group = document.querySelector('.tech-controls .view-toggle');
+    if (!group) return;
+    const buttons = [...group.querySelectorAll('button')];
+    buttons.forEach((b) => {
       b.addEventListener('click', () => applyTech(b.dataset.tech === 'show'));
+    });
+    attachRadioKeyboard(group, buttons, (b) => applyTech(b.dataset.tech === 'show'));
+  }
+
+  // Wire arrow-key navigation onto a role="radiogroup" so it satisfies the
+  // WAI-ARIA radiogroup contract. Activates the new radio on selection,
+  // restoring keyboard parity with screen-reader expectations.
+  function attachRadioKeyboard(group, buttons, activate) {
+    group.addEventListener('keydown', (event) => {
+      const idx = buttons.indexOf(event.target);
+      if (idx < 0) return;
+      let next = -1;
+      switch (event.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+          next = (idx + 1) % buttons.length;
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          next = (idx - 1 + buttons.length) % buttons.length;
+          break;
+        case 'Home':
+          next = 0;
+          break;
+        case 'End':
+          next = buttons.length - 1;
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      activate(buttons[next]);
+      buttons[next].focus();
     });
   }
 
@@ -88,7 +136,8 @@
   function applyTab(tab) {
     document.body.dataset.tab = tab;
     document.querySelectorAll('.tab').forEach((a) => {
-      a.setAttribute('aria-selected', a.dataset.tab === tab ? 'true' : 'false');
+      if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
     });
     if (!location.hash.includes('#section-') && !location.hash.includes('#entry-')) {
       window.scrollTo({ top: 0, behavior: 'auto' });
@@ -104,17 +153,20 @@
 
   function currentView() {
     let stored = null;
-    try { stored = localStorage.getItem('group-by'); } catch {}
+    try { stored = localStorage.getItem('group-by'); }
+    catch (err) { console.warn('localStorage read failed for group-by', err); }
     return stored === 'topic' ? 'topic' : 'scenario'; // default = scenario
   }
 
   function applyView(v) {
     if (v !== 'topic' && v !== 'scenario') v = 'scenario';
-    try { localStorage.setItem('group-by', v); } catch {}
+    try { localStorage.setItem('group-by', v); }
+    catch (err) { console.warn('localStorage write failed for group-by', err); }
     document.querySelectorAll('.view-controls .view-toggle button').forEach((b) => {
       const on = b.dataset.view === v;
       b.classList.toggle('is-active', on);
       b.setAttribute('aria-checked', on ? 'true' : 'false');
+      b.setAttribute('tabindex', on ? '0' : '-1');
     });
     const tocTitle = document.getElementById('toc-title');
     if (tocTitle) tocTitle.textContent = v === 'scenario' ? 'Scenarios' : 'Topics';
@@ -127,38 +179,55 @@
 
   function initViewToggle() {
     applyView(currentView());
-    document.querySelectorAll('.view-controls .view-toggle button').forEach((b) => {
+    const group = document.querySelector('.view-controls .view-toggle');
+    if (!group) return;
+    const buttons = [...group.querySelectorAll('button')];
+    buttons.forEach((b) => {
       b.addEventListener('click', () => applyView(b.dataset.view));
     });
+    attachRadioKeyboard(group, buttons, (b) => applyView(b.dataset.view));
   }
 
   // === Markdown loading ===
 
   async function loadAndRender() {
     const main = document.getElementById('content');
-    let markdown;
     try {
       const res = await fetch(SOURCE, { cache: 'no-cache' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      markdown = await res.text();
-    } catch (err) {
-      main.innerHTML = `<p class="loading">Could not load decision log: ${err.message}</p>`;
+      const markdown = await res.text();
+      if (typeof window.marked === 'undefined' || typeof window.marked.parse !== 'function') {
+        throw new Error('marked not loaded');
+      }
+      window.marked.setOptions({ headerIds: false, mangle: false, gfm: true });
+      const rendered = window.marked.parse(markdown);
+
+      // Metadata lives in HTML comments (`<!-- scenario: x; topic: y -->`)
+      // immediately after each h3. DOMPurify strips comments, so extract them
+      // into data attributes on an inert <template> first.
+      const tpl = document.createElement('template');
+      tpl.innerHTML = rendered;
+      attachMetadata(tpl.content);
+
+      main.innerHTML = sanitize(tpl.innerHTML);
       main.removeAttribute('aria-busy');
-      return;
+
+      hideIntro(main);
+      splitIntoSections(main);
+      structureFields(main);
+      entries = collectEntries(main);
+      applyView(currentView());
+      updatePendingBadge();
+      updateLastModified();
+      armPageLogoPin();
+    } catch (err) {
+      console.error('Failed to render decision log', err);
+      const fallback = document.createElement('p');
+      fallback.className = 'loading';
+      fallback.textContent = 'Could not load decision log. Try reloading the page.';
+      main.replaceChildren(fallback);
+      main.removeAttribute('aria-busy');
     }
-
-    marked.setOptions({ headerIds: false, mangle: false, gfm: true });
-    main.innerHTML = marked.parse(markdown);
-    main.removeAttribute('aria-busy');
-
-    hideIntro(main);
-    attachMetadata(main); // before splitIntoSections — comments are still adjacent to h3 here
-    splitIntoSections(main);
-    structureFields(main);
-    entries = collectEntries(main);
-    applyView(currentView());
-    updatePendingBadge();
-    updateLastModified();
   }
 
   function hideIntro(main) {
@@ -274,7 +343,7 @@
           }
           for (const seg of segments) {
             const p = document.createElement('p');
-            p.innerHTML = seg.body;
+            p.innerHTML = sanitize(seg.body);
             items.push({ field: true, label: seg.label, content: [p] });
           }
           block.remove();
@@ -338,29 +407,30 @@
 
     const groups = new Map(order.map((k) => [k, []]));
     for (const e of entries) {
-      const key = e[view] || 'cross-cutting';
+      const key = e[view] ?? 'cross-cutting';
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(e);
     }
 
-    decided.innerHTML = '';
+    const frag = document.createDocumentFragment();
     let first = true;
     for (const k of order) {
       const items = groups.get(k);
       if (!items || items.length === 0) continue;
       const h2 = document.createElement('h2');
       h2.id = `section-${k}`;
-      h2.textContent = labels[k] || k;
+      h2.textContent = labels[k] ?? k;
       if (first) {
         h2.classList.add('is-first');
         first = false;
       }
-      decided.appendChild(h2);
+      frag.appendChild(h2);
       for (const e of items) {
-        decided.appendChild(e.h3);
-        if (e.dl) decided.appendChild(e.dl);
+        frag.appendChild(e.h3);
+        if (e.dl) frag.appendChild(e.dl);
       }
     }
+    decided.replaceChildren(frag);
   }
 
   // === TOC + scroll spy ===
@@ -368,18 +438,21 @@
   function buildToc() {
     const list = document.getElementById('toc-list');
     if (!list) return;
-    list.innerHTML = '';
     const decided = document.querySelector('.decided-view');
-    if (!decided) return;
-    const headings = [...decided.querySelectorAll('h2')];
-    headings.forEach((h) => {
+    if (!decided) {
+      list.replaceChildren();
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    for (const h of decided.querySelectorAll('h2')) {
       const li = document.createElement('li');
       const a = document.createElement('a');
       a.href = `#${h.id}`;
       a.textContent = h.textContent;
       li.appendChild(a);
-      list.appendChild(li);
-    });
+      frag.appendChild(li);
+    }
+    list.replaceChildren(frag);
   }
 
   function setupScrollSpy() {
@@ -421,45 +494,75 @@
     }
   }
 
+  // Single scroll listener fans out to back-to-top + page-logo pin, gated
+  // behind one rAF so both run on the same frame.
+  const scrollListeners = [];
+  let scrollScheduled = false;
+  function onScroll() {
+    if (scrollScheduled) return;
+    scrollScheduled = true;
+    requestAnimationFrame(() => {
+      scrollScheduled = false;
+      for (const fn of scrollListeners) fn();
+    });
+  }
+  function registerScroll(fn) {
+    scrollListeners.push(fn);
+    fn();
+  }
+
   function initBackToTop() {
     const btn = document.getElementById('back-to-top');
     if (!btn) return;
-    btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
-    const update = () => { btn.hidden = window.scrollY < 400; };
-    window.addEventListener('scroll', update, { passive: true });
-    update();
+    btn.addEventListener('click', () => {
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
+    });
+    registerScroll(() => { btn.hidden = window.scrollY < 400; });
   }
 
+  // Pin threshold capture is deferred until the markdown has rendered, since
+  // the logo's natural position depends on the final header layout.
+  let pageLogoPinAt = null;
   function initPageLogo() {
     const logo = document.getElementById('page-logo');
     if (!logo) return;
-    // Compute the scroll threshold at which the logo should pin to viewport top.
-    // At rest, the logo sits inside the site header (absolute, top: 1.5rem).
-    // Once the user scrolls past that natural position, switch to fixed.
+    registerScroll(() => {
+      if (pageLogoPinAt === null) return;
+      logo.classList.toggle('is-pinned', window.scrollY > pageLogoPinAt);
+    });
+  }
+  function armPageLogoPin() {
+    const logo = document.getElementById('page-logo');
+    if (!logo) return;
     const naturalTop = logo.getBoundingClientRect().top + window.scrollY;
-    const pinAt = Math.max(0, naturalTop - 14); // 14px = .is-pinned top (~0.85rem) so the transition is seamless
-    const update = () => {
-      logo.classList.toggle('is-pinned', window.scrollY > pinAt);
-    };
-    window.addEventListener('scroll', update, { passive: true });
-    update();
+    // 14px ≈ .is-pinned top (0.85rem) so the swap is visually seamless.
+    pageLogoPinAt = Math.max(0, naturalTop - 14);
+    logo.classList.toggle('is-pinned', window.scrollY > pageLogoPinAt);
   }
 
   function updateLastModified() {
     const el = document.getElementById('updated');
     if (!el) return;
-    const when = document.lastModified;
-    if (!when) return;
-    const d = new Date(when);
+    const d = new Date(document.lastModified);
+    if (Number.isNaN(d.getTime())) return;
     el.textContent = `Last updated: ${d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}`;
   }
 
   // === Boot ===
+
+  window.addEventListener('error', (event) => {
+    console.error('Uncaught error', event.error || event.message);
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error('Unhandled rejection', event.reason);
+  });
 
   initTabs();
   initViewToggle();
   initTechToggle();
   initBackToTop();
   initPageLogo();
+  window.addEventListener('scroll', onScroll, { passive: true });
   loadAndRender();
 })();

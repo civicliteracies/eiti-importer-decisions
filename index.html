@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none';">
   <title>EITI Data Importer — Decision Log</title>
   <meta name="description" content="How the EITI Data Importer handles data, organized by scenario and topic. A reference artifact for stakeholder discussions.">
   <link rel="stylesheet" href="style.css">
@@ -21,37 +22,37 @@
   </header>
 
   <div class="control-strip">
-    <nav class="tabs" role="tablist" aria-label="Decision view">
-      <a href="#/decided" class="tab" role="tab" data-tab="decided" aria-selected="true">
+    <nav class="tabs" aria-label="Decision view">
+      <a href="#/decided" class="tab" data-tab="decided" aria-current="page">
         Decided<span class="badge badge-muted" id="decided-count" hidden></span>
       </a>
-      <a href="#/pending" class="tab" role="tab" data-tab="pending" aria-selected="false">
+      <a href="#/pending" class="tab" data-tab="pending">
         Pending<span class="badge" id="pending-count" hidden></span>
       </a>
     </nav>
     <div class="view-controls" id="view-controls">
-      <span class="view-label">Group by</span>
-      <div class="view-toggle" role="radiogroup" aria-label="Grouping">
-        <button type="button" data-view="scenario" role="radio" aria-checked="true" class="is-active">Scenario</button>
-        <button type="button" data-view="topic" role="radio" aria-checked="false">Topic</button>
+      <span class="view-label" id="group-by-label">Group by</span>
+      <div class="view-toggle" role="radiogroup" aria-labelledby="group-by-label">
+        <button type="button" data-view="scenario" role="radio" aria-checked="true" tabindex="0" class="is-active">Scenario</button>
+        <button type="button" data-view="topic" role="radio" aria-checked="false" tabindex="-1">Topic</button>
       </div>
     </div>
   </div>
 
   <div class="layout">
-    <nav id="toc" class="toc" aria-label="Sections">
+    <nav id="toc" class="toc" aria-labelledby="toc-title">
       <p class="toc-title" id="toc-title">Scenarios</p>
       <ol id="toc-list"></ol>
       <div class="tech-controls">
-        <span class="view-label">Technical detail</span>
-        <div class="view-toggle" role="radiogroup" aria-label="Technical detail visibility">
-          <button type="button" data-tech="hide" role="radio" aria-checked="true" class="is-active">Hide</button>
-          <button type="button" data-tech="show" role="radio" aria-checked="false">Show</button>
+        <span class="view-label" id="tech-label">Technical detail</span>
+        <div class="view-toggle" role="radiogroup" aria-labelledby="tech-label">
+          <button type="button" data-tech="hide" role="radio" aria-checked="true" tabindex="0" class="is-active">Hide</button>
+          <button type="button" data-tech="show" role="radio" aria-checked="false" tabindex="-1">Show</button>
         </div>
       </div>
     </nav>
 
-    <main id="content" aria-busy="true">
+    <main id="content" aria-busy="true" aria-live="polite">
       <p class="loading">Loading decision log…</p>
     </main>
   </div>
@@ -63,7 +64,8 @@
     <p id="updated"></p>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js" defer></script>
+  <script src="vendor/marked.min.js" defer></script>
+  <script src="vendor/purify.min.js" defer></script>
   <script src="script.js" defer></script>
 </body>
 </html>

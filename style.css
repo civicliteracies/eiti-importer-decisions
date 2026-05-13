@@ -36,13 +36,13 @@
 :root {
   --fg: #15171c;
   --fg-muted: #474b56;
-  --fg-subtle: #7c8089;
+  --fg-subtle: #626670;       /* WCAG AA: 5.21:1 on --bg */
   --bg: #fbfcfd;
   --bg-soft: #eef2f6;
   --bg-elevated: #ffffff;
   --accent: #132856;         /* EITI navy */
   --accent-soft: #e4ebf4;
-  --pending: #b87a0e;         /* EITI gold, darkened for legibility on light bg */
+  --pending: #8a5800;         /* EITI gold, darkened for WCAG AA on light bg (5.6:1) */
   --pending-accent: #F6A70A;  /* the literal EITI gold, used on lines/borders */
   --pending-bg: #fdf3d2;
   --pending-rule: #f0c862;
@@ -69,6 +69,28 @@ html {
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* === Focus ring (WCAG 2.4.7) === */
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.site-header :focus-visible {
+  outline-color: #ffffff;
+  outline-offset: 3px;
+}
+
+.view-toggle button:focus-visible {
+  outline-offset: 1px;
 }
 
 body {
@@ -200,13 +222,13 @@ a:hover { text-decoration-color: currentColor; }
   transition: color 120ms, border-color 120ms;
 }
 .tab:hover { color: var(--fg); }
-.tab[aria-selected="true"] {
+.tab[aria-current="page"] {
   color: var(--fg);
   border-bottom-color: var(--accent);
   font-weight: 600;
 }
 
-.tab[data-tab="pending"][aria-selected="true"] {
+.tab[data-tab="pending"][aria-current="page"] {
   color: var(--pending);
   border-bottom-color: var(--pending-accent);
 }
