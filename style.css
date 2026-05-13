@@ -432,32 +432,13 @@ body.show-technical .fields dd.field-technical {
 }
 .back-to-top[hidden] { display: none; }
 
-/* === Pending callout === */
+/* === Pending tab: pending-view content reads like decided-view; the tab
+   itself carries the orange affordance, so no need to re-style the body. */
 
-.pending-view {
-  background: var(--pending-bg);
-  border: 1px solid var(--pending-rule);
-  border-radius: 6px;
-  padding: 1.5rem 2rem 2rem;
-  margin: 0;
-}
+.pending-view { margin: 0; }
 
-.pending-view h2 {
-  color: var(--pending);
-  border-top: none;
-  padding-top: 0;
-  margin-top: 0;
-  font-size: 1.35rem;
-}
-
-.pending-view h3 {
-  font-size: 1.1rem;
-  color: var(--pending);
-}
-
-.pending-view .fields {
-  border-top-color: var(--pending-rule);
-}
+/* The section heading "0. Pending Decisions" is redundant with the tab. */
+.pending-view h2 { display: none; }
 
 /* === Footer === */
 
