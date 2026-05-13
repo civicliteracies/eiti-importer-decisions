@@ -54,17 +54,22 @@ a {
 }
 a:hover { text-decoration-color: currentColor; }
 
-/* === Site header (not sticky — only the inner section bar sticks) === */
+/* === Site header (EITI hero treatment — navy with the EITI hero image) === */
 
 .site-header {
-  background: var(--bg);
+  background-color: var(--accent);
+  background-image: url('hero-bg.png');
+  background-size: 50%;
+  background-position: right center;
+  background-repeat: no-repeat;
+  color: #ffffff;
 }
 
 .site-header-inner {
   position: relative;
   max-width: 80rem;
   margin: 0 auto;
-  padding: 2.5rem 1.5rem 1rem;
+  padding: 3rem 1.5rem 2.5rem;
 }
 
 .eyebrow {
@@ -72,22 +77,31 @@ a:hover { text-decoration-color: currentColor; }
   font-size: 0.75rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--fg-subtle);
-  margin: 0 0 0.4rem;
+  color: rgba(255, 255, 255, 0.72);
+  margin: 0 0 0.45rem;
 }
 
 .site-header h1 {
-  font-size: 2.2rem;
+  font-size: 2.4rem;
   line-height: 1.1;
   letter-spacing: -0.015em;
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.6rem;
+  color: #ffffff;
 }
 
 .lede {
   font-size: 1.02rem;
-  color: var(--fg-muted);
+  color: rgba(255, 255, 255, 0.88);
   margin: 0;
   max-width: 56ch;
+}
+
+@media (max-width: 900px) {
+  .site-header { background-size: 65%; }
+}
+@media (max-width: 600px) {
+  .site-header { background-image: none; }
+  .site-header-inner { padding: 1.75rem 1rem 1.5rem; }
 }
 
 /* === Sticky control strip (tabs + group-by) === */
@@ -115,17 +129,26 @@ a:hover { text-decoration-color: currentColor; }
   top: 1.5rem;
   right: 1.5rem;
   display: inline-block;
-  opacity: 0.65;
-  transition: opacity 150ms, top 0ms;
+  opacity: 0.85;
+  transition: opacity 150ms;
   z-index: 12;
 }
 .page-logo:hover { opacity: 1; }
-.page-logo img { display: block; height: 1.1rem; width: auto; }
+.page-logo img { display: block; height: 1.2rem; width: auto; }
 
+/* Default state: logo sits on the dark hero, show the negative variant. */
+.page-logo .logo-on-light { display: none; }
+.page-logo .logo-on-dark { display: block; }
+
+/* When pinned to the viewport top, the bg behind is the light sticky
+   control bar, so flip to the positive (navy) variant. */
 .page-logo.is-pinned {
   position: fixed;
   top: 0.85rem;
+  opacity: 0.65;
 }
+.page-logo.is-pinned .logo-on-dark { display: none; }
+.page-logo.is-pinned .logo-on-light { display: block; }
 
 .tab {
   display: inline-flex;
