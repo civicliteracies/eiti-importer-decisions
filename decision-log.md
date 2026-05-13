@@ -414,6 +414,17 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Technical detail:** `POST /batches/{id}/confirm` delegates to `BatchManager.confirm_atomic` in `packages/shared/src/shared/session/batch_manager.py`. The gate set `_BATCH_DECIDED_STATES` is `TERMINAL_STATES | {CONFIRMING, CONFIRMED, IMPORTED, EXPIRED, SUBMISSION_DELETED, STALE}`. The atomic write only transitions members whose latest state is `CONFIRMING` — already-decided members are returned in the response's `already_terminal` list. The pre-flight failure raises `BatchHasPendingMembers`, which the endpoint translates into a 409 response with the pending list.
 
+### What happens when one upload covers several country-year cohorts?
+<!-- scenario: submit-a-report; topic: workflow-status -->
+
+**Situation:** A file the user is uploading covers more than one country-year cohort — either a wide template that spans several cohorts in its rows, or a single-cohort file the user has chosen to import alongside others. The user picks which cohorts to import at the cohort-selection step and confirms.
+
+**Decision:** The tool splits the upload into one independent declaration per selected cohort. Each cohort runs through the rest of the import process on its own — review, confirm, import — exactly as if it had been uploaded as a single-cohort file. The original multi-cohort upload is grouped with its per-cohort children in a batch so the user sees and acts on them together: confirm all, cancel all, or work through them one at a time.
+
+**Rationale:** A declaration is one country and one reporting year, so a file that covers several cohorts can't be a single declaration. Splitting into one declaration per cohort means each child runs through the same review-and-confirm flow as any other upload — no separate code path. The batch keeps the cohorts visible as a unit so the user can act on the group with one click instead of chasing each cohort independently.
+
+**Technical detail:** The split happens on transition out of `SELECTION_CONFIRMING`. Each selected cohort becomes a child session attached to a `COHORT_FANOUT` batch that records the parent's `session_id`; the parent terminates `DISPATCHED`. Children skip the identification phase — cohort classification was already settled by the parent — and pick up the scalar pipeline from `PARSED`. Fat-file children (where the parent detected more than one cohort) carry a row-level cohort filter that scopes extraction to one cohort. SDF single-cohort children carry no filter because the cohort identity lives in the About-sheet metadata, not in row columns; applying a row-level filter would exclude every row.
+
 ---
 
 ## 4. Template Recognition
