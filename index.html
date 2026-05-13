@@ -12,24 +12,22 @@
     <div class="site-header-inner">
       <p class="eyebrow">EITI Data Importer</p>
       <h1>Decision Log</h1>
+      <a class="page-logo" id="page-logo" href="https://civicliteraci.es/" aria-label="Civic Literacy Initiative">
+        <img src="cli-logo.svg" alt="" width="56" height="30">
+      </a>
       <p class="lede">Reference documentation of the decisions taken by CLi as part of the development of the importer. Updated automatically from the source repository.</p>
     </div>
   </header>
 
   <div class="control-strip">
-    <div class="strip-top">
-      <nav class="tabs" role="tablist" aria-label="Decision view">
-        <a href="#/decided" class="tab" role="tab" data-tab="decided" aria-selected="true">
-          Decided<span class="badge badge-muted" id="decided-count" hidden></span>
-        </a>
-        <a href="#/pending" class="tab" role="tab" data-tab="pending" aria-selected="false">
-          Pending<span class="badge" id="pending-count" hidden></span>
-        </a>
-      </nav>
-      <a class="strip-logo" href="https://civicliteraci.es/" aria-label="Civic Literacy Initiative">
-        <img src="cli-logo.svg" alt="" width="56" height="30">
+    <nav class="tabs" role="tablist" aria-label="Decision view">
+      <a href="#/decided" class="tab" role="tab" data-tab="decided" aria-selected="true">
+        Decided<span class="badge badge-muted" id="decided-count" hidden></span>
       </a>
-    </div>
+      <a href="#/pending" class="tab" role="tab" data-tab="pending" aria-selected="false">
+        Pending<span class="badge" id="pending-count" hidden></span>
+      </a>
+    </nav>
     <div class="view-controls" id="view-controls">
       <span class="view-label">Group by</span>
       <div class="view-toggle" role="radiogroup" aria-label="Grouping">

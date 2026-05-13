@@ -430,6 +430,21 @@
     update();
   }
 
+  function initPageLogo() {
+    const logo = document.getElementById('page-logo');
+    if (!logo) return;
+    // Compute the scroll threshold at which the logo should pin to viewport top.
+    // At rest, the logo sits inside the site header (absolute, top: 1.5rem).
+    // Once the user scrolls past that natural position, switch to fixed.
+    const naturalTop = logo.getBoundingClientRect().top + window.scrollY;
+    const pinAt = Math.max(0, naturalTop - 14); // 14px = .is-pinned top (~0.85rem) so the transition is seamless
+    const update = () => {
+      logo.classList.toggle('is-pinned', window.scrollY > pinAt);
+    };
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+  }
+
   function updateLastModified() {
     const el = document.getElementById('updated');
     if (!el) return;
@@ -445,5 +460,6 @@
   initViewToggle();
   initTechToggle();
   initBackToTop();
+  initPageLogo();
   loadAndRender();
 })();
