@@ -164,6 +164,17 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Technical detail:** The row-aware logic lives in `@model_validator(mode="before")` methods on the row models — see `cascade` on `CompanyRevenueRow` in `packages/parser/src/parser/domain/schemas/v2p1.py` and the shared helper `cascade_metadata_row_na` in `packages/parser/src/parser/domain/schemas/validation_helpers.py`. The "Not available" auto-fill is `MapToNotAvailableRule` in `packages/cleaner/src/cleaner/rules.py`, gated on `f.code == ParserCode.BLANK_CELL` — it never matches `BLANK_CELL_DEPENDENT` or `BLANK_CELL_BLOCKING`.
 
+### Which rows reach the database from an API extract upload?
+<!-- scenario: trust-the-data; topic: data-quality-policy -->
+
+**Situation:** The EITI API publishes a single spreadsheet that bundles every kind of revenue row together — government agency payments, company payments, and a small number of rows tagged as projects or with no organisation type at all. When the user uploads this file, the tool has to decide which of those rows become entries in the database.
+
+**Decision:** Rows tagged as agency revenues become government-revenue records. Rows tagged as company revenues become company-payment records, and the company itself is also added to the list of reporting companies. Rows tagged as project revenue, and rows with no tag at all, are silently dropped — no entry, no error message, no warning on the dashboard.
+
+**Rationale:** The reconciliation the tool computes has exactly two sides — what government agencies received, and what companies paid. Project-attributed and untagged rows do not fit either side, and in the reference file from EITI they are a rounding error: eighteen rows in eighty-one thousand, or 0.02% of the file. Showing each one as a finding would flood the dashboard with non-actionable noise on every import.
+
+**Technical detail:** The three header-search schemas in `packages/parser/src/parser/domain/schemas/api_extract_v1.py` each declare a `row_filter` callable that inspects each row's `organisation.type` cell. The agency schema admits rows whose value is `"agency"`; the company-revenue and company-metadata schemas admit rows whose value is `"company"`. Everything else is rejected before the row reaches Pydantic validation, so no findings are produced for the dropped rows.
+
 ---
 
 ## 2. Currency & Financial Calculations
@@ -554,6 +565,17 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Technical detail:** `CohortSchema` in `packages/parser/src/parser/domain/submissions/models.py` is generic over `CohortT` — each submission narrows it (`SDFCohort` in `packages/parser/src/parser/domain/submissions/registry.py` is a TypedDict with `country_iso3` and `year`). The classification loop is `DetectorService._classify_cohorts` in `packages/parser/src/parser/identification/detector_service.py`, which calls `TargetDbManager.exists()` per cohort. The matcher invokes `cohort_schema.extractor(ctx)` inside `identify_template` and wraps the result in `list(...)` so lazy iterators don't escape the workbook's scope. Per-cohort findings are `COHORT_DETECTED`, `COHORT_NEW`, and `COHORT_DUPE`.
 
+### Why does the tool block re-uploads of the same data from the EITI API?
+<!-- scenario: avoid-duplicate-imports; topic: entity-resolution -->
+
+**Situation:** An operator uploads the EITI API export for Cameroon 2001 in January. In June, a new export is generated from the same data — different file (new timestamp, possibly different row order) but the same Cameroon 2001 declaration.
+
+**Decision:** The tool blocks the second upload and marks it as a duplicate. The operator is told that the Cameroon 2001 declaration is already imported, even though the file bytes differ from the January upload.
+
+**Rationale:** A declaration in the database is identified by the country and reporting year, not by which file produced it. Two EITI API exports for the same country and year describe the same declaration — importing the second one would create a duplicate row with stale data. The same rule applies to the standard summary data file format: re-uploading the SDF for Cameroon 2001 from a different submitter still resolves to the same declaration and is blocked the same way.
+
+**Technical detail:** Declaration identity is derived from `(country_iso3, year)` via `uuid5(DECLARATION_NAMESPACE, "iso3:year")`. The same UUID derivation is applied at three layers: when DetectorService announces the cohort, when the mapper writes the `metadata_summary_data_files` row, and when `TargetDbManager.exists_many` checks for prior imports. API extract files declare cohorts by `(iso2, year)`; `iso2_to_iso3` normalizes the alpha-2 code to alpha-3 before the UUID derivation, so an API extract for `CM` and an SDF for `CMR` resolve to the same declaration UUID. The mapper writes a `metadata_summary_data_files` row for API extract submissions even though they have no About sheet — identity comes from per-child `PipelineContext.country_iso3` + `cohort_year` populated by the selection-confirmation endpoint via `CohortSchema.country_iso3` / `.year`.
+
 ### What happens when the user uploads a file that's already imported?
 <!-- scenario: avoid-duplicate-imports; topic: entity-resolution -->
 
@@ -578,6 +600,17 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 **Rationale:** The two failure modes are not equally recoverable. Treating "Statoil ASA" as new when the EITI database already has it is fixable: the new entity gets its own identifier, and a later cleanup pass can merge it with the correct record by name comparison. Linking "Statoil ASA" to the wrong company on the strength of a close match corrupts the link silently — the row points at the wrong entity, no rule will catch it, and there is no automated way to find and fix it afterwards. The asymmetry makes "ask the user when in doubt" the conservative default.
 
 **Technical detail:** The threshold is `DEFAULT_THRESHOLD = 86` in `packages/enricher/src/enricher/matching.py`; the comment there explains it's a noise plateau from shared corporate suffixes. The UUID4 fallback for unresolved AMBIGUOUS findings is the `if f.code == EnrichmentCode.AMBIGUOUS: ... if coord in resolved_coords: continue` block in `_complete_new_entities` in `packages/mapper/src/mapper/mapper_service.py` — only AMBIGUOUS findings the user explicitly resolved during review are skipped; the rest fall through to the same UUID4 assignment as NEW.
+
+### Do an EITI summary file and an API extract for the same country-year share a declaration?
+<!-- scenario: avoid-duplicate-imports; topic: entity-resolution -->
+
+**Situation:** The same country-year submission can reach the tool through two routes — a Summary Data Template the country filed directly, or an EITI API extract that bundles many country-year submissions in one file. The two routes use different country codes: the Summary Data Template carries the three-letter ISO code (NOR, AGO), and the API extract carries the two-letter ISO code (NO, AO). The duplicate-detection rule has to decide whether a Summary Data Template for Norway 2024 and an API extract that includes Norway 2024 are the same declaration or two separate ones.
+
+**Decision:** Both routes land on the same declaration. If the user uploads the Summary Data Template for Norway 2024 and then later uploads an API extract that includes Norway 2024, the duplicate-detection rule (see "What does the tool treat as a single submission for duplicate detection?") recognises the second upload as a re-import of the first. To hold both representations side by side, the user has to delete the prior one before re-uploading.
+
+**Rationale:** A country-year is one declaration, no matter which file route delivered the data. Storing them as separate database rows would mean a query for "what did Norway disclose for 2024?" returns two answers, splitting downstream reports. Forcing a delete-and-replace decision keeps the database to one row per declaration and puts the choice of which version to keep in the user's hands.
+
+**Technical detail:** Both submission types compute the declaration's unique identifier with the same formula: `uuid5(DECLARATION_NAMESPACE, f"{iso3}:{year}")`. The Summary Data Template schema reads `iso3` directly from the About sheet. The API extract schema reads `iso2` from the row data and translates it to `iso3` through a static map (`iso2_to_iso3` in `packages/parser/src/parser/domain/country_resolver.py`) before passing it to the same formula — so the resulting UUID matches. Country codes the map cannot resolve (Kosovo's `XK`, deprecated codes) are dropped at extraction time and logged via the `api_extract_cohorts_dropped` event.
 
 ---
 
