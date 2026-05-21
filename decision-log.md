@@ -816,11 +816,16 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Situation:** A developer is iterating on a test file on their laptop, repeatedly re-uploading the same file.
 
-**Decision:** On a developer's local installation, the byte-for-byte duplicate-upload check is turned off so the same test file can be uploaded again and again without first wiping the database. On the dev, test, staging, and production servers the check is always on, and there is no way for a caller to ask the server to skip it.
+**Decision:** On a developer's local installation, every layer of duplicate-import protection is turned off so the same test file can be uploaded again and again without first wiping the database. On the dev, test, staging, and production servers the protection is always on at every layer, and there is no way for a caller to ask the server to skip it.
 
-**Rationale:** On a developer's machine, the duplicate check is pure friction — every test upload would otherwise need a database reset, with no integrity benefit at a single-developer workstation. Servers enforce the check uniformly so no caller can quietly disable it.
+**Rationale:** On a developer's machine, the duplicate check is pure friction — every test upload would otherwise need a database reset, with no integrity benefit at a single-developer workstation. Servers enforce the check uniformly so no caller can quietly disable it. A single per-environment switch keeps the policy coherent: there is one knob, not several that could drift out of sync.
 
-**Technical detail:** Gated by `Settings.dedup_uploads_by_hash` (`bool | None = None`, profile-driven). The LOCAL profile sets it to `False`; the DEV, TEST, STAGING, and PROD profiles set it to `True`. Both the upload-time check and the confirmation-time check guard their body with `if settings.dedup_uploads_by_hash:` — when False, both branches no-op and no SHA-256 dedup runs at either point. There is no per-request bypass. Field defined in `packages/shared/src/shared/settings.py`. Consumed at `endpoints.upload` and `endpoints.confirm_sessions` in `apps/api/src/api/endpoints.py`.
+**Technical detail:** Gated by `Settings.dedup_imports` (`bool | None = None`, profile-driven). The LOCAL profile sets it to `False`; the DEV, TEST, STAGING, and PROD profiles set it to `True`. The flag controls two layers from one source:
+
+- *Upload time.* `endpoints.upload` and `endpoints.confirm_sessions` guard their SHA-256-against-prior-imports body with `if settings.dedup_imports:` — when False, both branches no-op.
+- *Identification time.* `DetectorService` accepts `dedup_imports` via its constructor (threaded through `PipelineFactory` from `settings.dedup_imports`). When False, the cohort classification block is skipped: COHORT_DETECTED findings still emit but NEW/DUPE classification and the terminal `DUPLICATE_SUBMISSION` finding do not. A re-upload of an already-imported declaration therefore advances past IDENTIFIED instead of dying with a terminal error.
+
+There is no per-request bypass. Field defined in `packages/shared/src/shared/settings.py`. Consumed at the four `PipelineFactory(...)` call sites in `apps/api/src/api/endpoints.py`, the one in `packages/pipeline/src/pipeline/recovery.py`, and the two upload/confirmation gates in `endpoints.py`.
 
 ### What happens when a colleague's stuck session blocks the user from confirming a file?
 <!-- scenario: avoid-duplicate-imports; topic: import-behavior -->
