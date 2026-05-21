@@ -120,7 +120,7 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 **Rationale:** The tool has no information that distinguishes "the country doesn't track this" from "the country forgot to report it" — both arrive as the same empty cell. Auto-marking the cell "Not applicable" would claim a structural reason the tool can't actually verify; leaving it empty in the database would erase the difference between an unknown gap and a deliberate omission. Treating every blank as a data gap keeps the substitution visible in the review tab, where a human reviewer can override it to "Not applicable" if that's the right call.
 
-**Technical detail:** The auto-fill rule is `MapToNotAvailableRule` in `packages/cleaner/src/cleaner/rules.py`; it fires only on `ParserCode.BLANK_CELL`, which is itself only emitted when the field's type union explicitly contains `NotAvailable` (see `_blank_cell_code_for` in `packages/parser/src/parser/validation/row_validator.py`). The free-text carve-out is the `Annotated[str | Blank, BeforeValidator(_none_to_blank)]` alias in `packages/parser/src/parser/domain/schemas/validation_helpers.py`.
+**Technical detail:** The auto-fill rule is `MapToNotAvailableRule` in `packages/cleaner/src/cleaner/rules.py`; it fires only on `ParserCode.BLANK_CELL`, which is itself only emitted when the field's type union explicitly contains `NotAvailable` (see `blank_cell_code_for` in `packages/parser/src/parser/validation/row_validator.py`). The free-text carve-out is the `Annotated[str | Blank, BeforeValidator(_none_to_blank)]` alias in `packages/parser/src/parser/domain/schemas/validation_helpers.py`.
 
 ### Which blank cells block import and which don't?
 <!-- scenario: fix-problems-before-import; topic: data-quality-policy -->
@@ -137,7 +137,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** Whether a blank blocks import is a domain question that depends on what the field means: a strictly-typed payment value cannot be silently filled, while an optional headcount can. Locking each behaviour to a different flag code lets the dashboard surface the right action without re-deriving the rule, and prevents the auto-fill from guessing between the two missing-value markers when both are legal.
 
-**Technical detail:** The three parser codes are `BLANK_CELL` (non-blocking, auto-fills via `MapToNotAvailableRule`), `BLANK_CELL_BLOCKING` (no sentinel legal), and `BLANK_CELL_DEPENDENT` (`NotApplicable` legal but not `NotAvailable`). The code is derived by `_blank_cell_code_for(model, field_name)` in `packages/parser/src/parser/validation/row_validator.py`, which calls `get_args` on the field's annotation and returns `BLANK_CELL` if `NotAvailable` is in the union, `BLANK_CELL_DEPENDENT` if `NotApplicable` is in it, and `BLANK_CELL_BLOCKING` otherwise. The dependent-case candidate is pulled by `_extract_enum_candidates` from the Pydantic enum error on the union.
+**Technical detail:** The three parser codes are `BLANK_CELL` (non-blocking, auto-fills via `MapToNotAvailableRule`), `BLANK_CELL_BLOCKING` (no sentinel legal), and `BLANK_CELL_DEPENDENT` (`NotApplicable` legal but not `NotAvailable`). The code is derived by `blank_cell_code_for(model, field_name)` in `packages/parser/src/parser/validation/row_validator.py`, which calls `get_args` on the field's annotation and returns `BLANK_CELL` if `NotAvailable` is in the union, `BLANK_CELL_DEPENDENT` if `NotApplicable` is in it, and `BLANK_CELL_BLOCKING` otherwise. The dependent-case candidate is pulled by `_extract_enum_candidates` from the Pydantic enum error on the union.
 
 ### How does the tool distinguish a blank cell from a wrongly-typed value?
 <!-- scenario: fix-problems-before-import; topic: data-quality-policy -->
@@ -151,7 +151,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** Empty cells and wrongly-filled cells have different causes (forgotten data versus wrong vocabulary), different auto-corrections apply to each, and the reviewer's action is different (look up the missing data versus confirm the proposed correction). Giving them distinct flags keeps that distinction visible from upload to import and prevents auto-fill logic from running on cells that aren't actually empty.
 
-**Technical detail:** The branch lives at lines 199–202 of `packages/parser/src/parser/validation/row_validator.py` inside `_map_pydantic_errors`: `if bad_value is None and resolved_field in model.model_fields: code = _blank_cell_code_for(...)` else `code = ParserCode.INVALID_DATATYPE`. Whitespace-to-`None` normalisation happens in `validate_template_values` in `packages/parser/src/parser/domain/schemas/validation_helpers.py`. The four cleaner repair rules — `EnumCorrectionRule`, `StandardizeNotAvailableRule`, `StandardizeNotApplicableRule`, and `PlaceholderRemovalRule` — live in `packages/cleaner/src/cleaner/rules.py`.
+**Technical detail:** The branch lives at lines 199–202 of `packages/parser/src/parser/validation/row_validator.py` inside `_map_pydantic_errors`: `if bad_value is None and resolved_field in model.model_fields: code = blank_cell_code_for(...)` else `code = ParserCode.INVALID_DATATYPE`. Whitespace-to-`None` normalisation happens in `validate_template_values` in `packages/parser/src/parser/domain/schemas/validation_helpers.py`. The four cleaner repair rules — `EnumCorrectionRule`, `StandardizeNotAvailableRule`, `StandardizeNotApplicableRule`, and `PlaceholderRemovalRule` — live in `packages/cleaner/src/cleaner/rules.py`.
 
 ### Who decides whether a blank cell becomes 'Not applicable' or 'Not available'?
 <!-- scenario: cross-cutting; topic: data-quality-policy -->
@@ -460,7 +460,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** A single rigid rule — for example, "the Introduction text must say Version 2.1 exactly" — would reject any file where the submitter renamed a sheet, edited the Introduction, or rebuilt the workbook from scratch. Combining several pieces of evidence lets the tool still recognise a file when one signal is missing or has drifted, which matches what real submissions look like.
 
-**Technical detail:** Scoring lives in `score_templates` in `packages/parser/src/parser/identification/matcher.py`. Each `SubmissionDefinition` in `packages/parser/src/parser/domain/submissions/registry.py` supplies its `FingerprintRules.version_string` regex and its `schemas` sequence; the schemas whose `used_in_identification` flag is set feed the structural signal. The three-signal weighting is 50 / 20 / 80 on a 0-150 scale. The dispatcher inside `score_templates` picks one of `_check_standard_table`, `_check_kvp`, or `_check_fixed_columns` per schema type.
+**Technical detail:** Scoring lives in `score_templates` in `packages/parser/src/parser/identification/matcher.py`. Each `SubmissionDefinition` in `packages/parser/src/parser/domain/submissions/registry.py` supplies its `FingerprintRules.version_string` regex and its `schemas` sequence; the schemas whose `used_in_identification` flag is set feed the structural signal. The three-signal weighting is 50 / 20 / 80 on a 0-150 scale. The dispatcher inside `score_templates` picks one of `check_standard_table`, `check_kvp`, or `check_fixed_columns` per schema type.
 
 ### When does a template version qualify as a candidate?
 <!-- scenario: submit-a-report; topic: template-recognition -->
@@ -471,7 +471,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** The bar lets the tool tolerate files that have drifted away from the template (renamed sheets, edited Introduction text, partial column coverage) without accepting unrelated workbooks that happen to share a sheet name or two. Setting it too high would force a re-upload every time a submitter touched the boilerplate; setting it too low would surface bogus options and force the user through needless confirmation prompts.
 
-**Technical detail:** The threshold is the literal `if final_score >= 40` check in `score_templates` in `packages/parser/src/parser/identification/matcher.py`. The resulting list flows out as `MatchResult.candidates` and drives the `SUBMISSION_DETECTED` vs `SUBMISSION_AMBIGUOUS` branch in `DetectorService._build_detection_findings`.
+**Technical detail:** The threshold is the literal `if final_score >= 40` check in `score_templates` in `packages/parser/src/parser/identification/matcher.py`. The resulting list flows out as `MatchResult.candidates` and drives the `SUBMISSION_DETECTED` vs `SUBMISSION_AMBIGUOUS` branch in `DetectorService.build_detection_findings`.
 
 ### What happens when more than one template could fit?
 <!-- scenario: submit-a-report; topic: template-recognition -->
@@ -504,7 +504,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** Every step after recognition is wired to a specific template's structure. Without a recognised template there is no agreed-upon shape to read the file against, no way to translate its cells into the dashboard's columns, and no way to produce meaningful checks. Carrying on would produce junk findings and waste effort on a file that needs to go back to the submitter.
 
-**Technical detail:** `SUBMISSION_UNRECOGNIZED` is registered as a terminal finding code in `packages/pipeline/src/pipeline/factory.py` (in the `terminal_codes` set alongside `DUPLICATE_SUBMISSION` and `FILE_OPEN_ERROR`). The detector emits it from `_build_detection_findings` in `packages/parser/src/parser/identification/detector_service.py` when `result.candidates` is empty.
+**Technical detail:** `SUBMISSION_UNRECOGNIZED` is registered as a terminal finding code in `packages/pipeline/src/pipeline/factory.py` (in the `terminal_codes` set alongside `DUPLICATE_SUBMISSION` and `FILE_OPEN_ERROR`). The detector emits it from `build_detection_findings` in `packages/parser/src/parser/identification/detector_service.py` when `result.candidates` is empty.
 
 ### How does the tool handle a table found on the wrong sheet?
 <!-- scenario: submit-a-report; topic: template-recognition -->
@@ -515,7 +515,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** Submitters routinely edit the templates — sheets get renamed, tables get copy-pasted between workbooks. Refusing to recognise a moved table would push too many real submissions into the "unrecognised" path. Halving the credit keeps the moved table as evidence without letting it overwhelm the choice between v2.0 and v2.1, which differ in exactly where some tables live and would otherwise be indistinguishable.
 
-**Technical detail:** The penalty is the `score *= 0.5  # 50% penalty for wrong sheet` line in `_check_standard_table` and the matching `score *= 0.5  # 50% penalty for renamed sheet` line in `_check_kvp`, both in `packages/parser/src/parser/identification/matcher.py`.
+**Technical detail:** The penalty is the `score *= 0.5  # 50% penalty for wrong sheet` line in `check_standard_table` and the matching `score *= 0.5  # 50% penalty for renamed sheet` line in `check_kvp`, both in `packages/parser/src/parser/identification/matcher.py`.
 
 ---
 
@@ -530,7 +530,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** Comparing names letter-by-letter would treat trivial differences — accents, casing, trailing spaces — as different entities and fill the database with duplicates of the same company. Automatically accepting close matches would do the opposite damage: quietly link a near-miss to the wrong record, leaving the file pointing at the wrong entity with no easy way to spot or fix it later. Routing close matches to the user for confirmation keeps both failure modes off the table.
 
-**Technical detail:** Normalisation is `_normalize` in `packages/enricher/src/enricher/enricher_service.py`; classification is `classify_match` in `packages/enricher/src/enricher/matching.py`. The corporate suffix regex is `_SUFFIX_PATTERN` in the same file; reference names shorter than 4 characters after suffix stripping are excluded from fuzzy matching (the `_MIN_FUZZY_NAME_LENGTH` constant) to prevent abbreviations like "INC." from matching everything. The fuzzy comparator is rapidfuzz WRatio with a threshold of 86/100. Reference records come from `DatasetteSource` (which hits the public EITI Datasette at `soe-database.eiti.org`) in dev/test environments and from `LocalDbSource` (the deployment's target DB) in staging/prod.
+**Technical detail:** Normalisation is `normalize` in `packages/enricher/src/enricher/enricher_service.py`; classification is `classify_match` in `packages/enricher/src/enricher/matching.py`. The corporate suffix regex is `_SUFFIX_PATTERN` in the same file; reference names shorter than 4 characters after suffix stripping are excluded from fuzzy matching (the `_MIN_FUZZY_NAME_LENGTH` constant) to prevent abbreviations like "INC." from matching everything. The fuzzy comparator is rapidfuzz WRatio with a threshold of 86/100. Reference records come from `DatasetteSource` (which hits the public EITI Datasette at `soe-database.eiti.org`) in dev/test environments and from `LocalDbSource` (the deployment's target DB) in staging/prod.
 
 ### What identifier is given to a brand-new entity?
 <!-- scenario: trust-the-data; topic: entity-resolution -->
@@ -541,7 +541,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** Every row in the dashboard needs to point at some entity record, including for entities the EITI database has never seen. Minting the identifier locally keeps the tool self-contained — it does not have to call out to a central system to register the entity — while still producing something unique enough that a later cleanup pass can match it up with the official record once the entity is registered upstream.
 
-**Technical detail:** UUID assignment is `_complete_new_entities` in `packages/mapper/src/mapper/mapper_service.py`. The field-to-entity-type mapping is the `_ENTITY_FIELD_TYPE` dict at the top of the same file (`company_name` → COMPANY, `full_name_of_entity`/`full_name_of_agency`/`government_agency` → GOV_ENTITY, `project_name` → PROJECT). Identifiers are UUID4s prefixed by entity type — `eiti_id_company:<uuid>`, `eiti_id_government:<uuid>`, `eiti_id_project:<uuid>` — defined as `EntityType` in `packages/shared/src/shared/diagnostics.py`. Metadata is written to `metadata_companies`, `metadata_gov_entities`, or `metadata_projects`. Unresolved AMBIGUOUS findings (those where the reviewer never confirmed a candidate) get the same UUID4 treatment as NEW ones.
+**Technical detail:** UUID assignment is `_complete_new_entities` in `packages/mapper/src/mapper/mapper_service.py`. The field-to-entity-type mapping is the `ENTITY_FIELD_TYPE` dict at the top of the same file (`company_name` → COMPANY, `full_name_of_entity`/`full_name_of_agency`/`government_agency` → GOV_ENTITY, `project_name` → PROJECT). Identifiers are UUID4s prefixed by entity type — `eiti_id_company:<uuid>`, `eiti_id_government:<uuid>`, `eiti_id_project:<uuid>` — defined as `EntityType` in `packages/shared/src/shared/diagnostics.py`. Metadata is written to `metadata_companies`, `metadata_gov_entities`, or `metadata_projects`. Unresolved AMBIGUOUS findings (those where the reviewer never confirmed a candidate) get the same UUID4 treatment as NEW ones.
 
 ### Why is a company matched globally but agencies and projects per-country?
 <!-- scenario: trust-the-data; topic: entity-resolution -->
@@ -563,7 +563,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** A predictable identifier means the duplicate check, the import step, and the "has this country-year already been imported?" check all arrive at the same identifier from the same inputs without needing to coordinate through a shared counter or lookup. It also lets the rule "a re-import replaces the prior rows" work — the new write targets exactly the same record as the old one. A random, one-off identifier would make every re-upload look like a fresh declaration.
 
-**Technical detail:** The namespace is the fixed `DECLARATION_NAMESPACE` UUID at the top of `packages/shared/src/shared/diagnostics.py`. The derivation is `uuid5(DECLARATION_NAMESPACE, f"{country_iso3}:{year}")` in three places that must agree: `DetectorService._build_detection_findings` (emits the finding), `_sdf_existence_key` in `packages/parser/src/parser/domain/submissions/registry.py` (looks up duplicates in the target DB), and the mapper (writes the row).
+**Technical detail:** The namespace is the fixed `DECLARATION_NAMESPACE` UUID at the top of `packages/shared/src/shared/diagnostics.py`. The derivation is `uuid5(DECLARATION_NAMESPACE, f"{country_iso3}:{year}")` in three places that must agree: `DetectorService.build_detection_findings` (emits the finding), `_sdf_existence_key` in `packages/parser/src/parser/domain/submissions/registry.py` (looks up duplicates in the target DB), and the mapper (writes the row).
 
 ### What does the tool treat as a single submission for duplicate detection?
 <!-- scenario: avoid-duplicate-imports; topic: entity-resolution -->
@@ -884,7 +884,7 @@ There is no per-request bypass. Field defined in `packages/shared/src/shared/set
 
 **Rationale:** Forcing every later step to handle the cross-tab shape would scatter v1-specific logic through reconciliation, the cleaned tables, and the dashboard. Reshaping to a row-per-payment list at the reading stage contains the version-specific shape work in one place and lets every later step stay version-agnostic.
 
-**Technical detail:** `COMPANY_REVENUE_SCHEMA_V1` and `_discover_company_columns` in `packages/parser/src/parser/domain/schemas/v1.py`; `PivotTableLocator` and `PivotTableReader` in `packages/parser/src/parser/extraction/location_strategies.py`. Each emitted row carries `gfs_code`, `gfs_description`, `revenue_stream_name`, `government_agency` (from the row), `company_name` (from the column header on row 4), and `revenue_value` (the cell value). Company metadata (id, sector, commodities) lives in the same pivot header and is extracted separately by `COMPANY_HEADER_SCHEMA_V1` (PivotHeaderSchema) into `companies_v1`.
+**Technical detail:** `COMPANY_REVENUE_SCHEMA_V1` and `discover_company_columns` in `packages/parser/src/parser/domain/schemas/v1.py`; `PivotTableLocator` and `PivotTableReader` in `packages/parser/src/parser/extraction/location_strategies.py`. Each emitted row carries `gfs_code`, `gfs_description`, `revenue_stream_name`, `government_agency` (from the row), `company_name` (from the column header on row 4), and `revenue_value` (the cell value). Company metadata (id, sector, commodities) lives in the same pivot header and is extracted separately by `COMPANY_HEADER_SCHEMA_V1` (PivotHeaderSchema) into `companies_v1`.
 
 ### Why does v2.0 reference internal Excel table names that don't match the data?
 <!-- scenario: compare-across-versions; topic: version-differences -->
