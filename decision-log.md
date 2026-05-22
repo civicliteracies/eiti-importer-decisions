@@ -447,6 +447,17 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Technical detail:** The split happens on transition out of `SELECTION_CONFIRMING`. Each selected cohort becomes a child session attached to a `COHORT_FANOUT` batch that records the parent's `session_id`; the parent terminates `DISPATCHED`. Children skip the identification phase — cohort classification was already settled by the parent — and pick up the scalar pipeline from `PARSED`. Fat-file children (where the parent detected more than one cohort) carry a row-level cohort filter that scopes extraction to one cohort. SDF single-cohort children carry no filter because the cohort identity lives in the About-sheet metadata, not in row columns; applying a row-level filter would exclude every row.
 
+### What happens when an upload covers more cohorts than the importer can process at once?
+<!-- scenario: submit-a-report; topic: workflow-status -->
+
+**Situation:** The importer processes a limited number of cohorts at the same time — a number the system administrator configures. When an uploaded file is detected to contain many cohorts (some templates can hold dozens of country-year combinations in one file), the operator picks which ones to import on the cohort-selection screen.
+
+**Decision:** If the operator ticks more cohorts than the limit, the screen shows an orange banner explaining the limit and how many to untick. The Confirm button stays disabled while the selection is over the limit. The banner clears and Confirm re-enables as soon as the selection drops back within the limit. The operator is never silently blocked — they always see why they can't continue and what to do about it.
+
+**Rationale:** A hard-block dialog would interrupt the operator with no path to resolve in the moment. A silent submit-and-fail would waste the operator's time and leave them guessing why nothing happened. An advisory banner with a disabled Confirm gives the operator the information they need to act, in the place where they're already acting.
+
+**Technical detail:** The limit is `Settings.max_concurrent_pipelines` (default 10), the same value that sizes the server's pipeline concurrency gate. The importer refreshes its understanding of the limit automatically — an administrator changing the limit while the operator is working updates what they see without a reload. The server enforces the same limit as a safety net: `POST /sessions/{session_id}/selection-confirmation` returns HTTP 413 with a `CapExceededDetail` body if the `selected_cohorts` list exceeds the configured limit.
+
 ### How does the multi-file workspace remember what I was doing?
 <!-- scenario: submit-a-report; topic: workflow-status -->
 
