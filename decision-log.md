@@ -791,7 +791,7 @@ The banner-vs-dialog split keeps the user's flow intact for the common cases (re
 
 **Rationale:** Deletion permanently removes a declaration's data from the EITI database. Requiring a deliberate identity entry plus a browser confirmation keeps a misclick from wiping a declaration, and the identity captured at the first step is what the audit log records.
 
-**Technical detail:** Endpoint `delete_declaration` in `apps/api/src/api/data_endpoints.py` requires a `DeleteRequest` body (`full_name`, `email`, `role`, `channel`). The browser-side flow issues a `confirm()` dialog before firing the `DELETE /declarations/{declaration_uuid}` request. The endpoint constructs an `AuditStamp` and calls `TargetDbManager.delete`.
+**Technical detail:** Endpoint `delete_import` in `apps/api/src/api/imports_endpoints.py` requires a `DeleteRequest` body (`full_name`, `email`, `role`, `channel`). The browser-side flow issues a `confirm()` dialog before firing the `DELETE /imports/{record_id}` request. The endpoint constructs an `AuditStamp` and calls `TargetDbManager.delete`.
 
 ### Why might an import fail at the last step?
 <!-- scenario: submit-a-report; topic: import-behavior -->
