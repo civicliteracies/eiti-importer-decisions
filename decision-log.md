@@ -26,13 +26,19 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 ### What kinds of errors can be fixed in the tool?
 <!-- scenario: fix-problems-before-import; topic: data-quality-policy -->
 
-**Situation:** When the importer flags a problem with a cell in the uploaded file, the dashboard needs to tell the user which problems they can resolve on the review tab and which require going back to the source file and re-uploading.
+**Situation:** When the importer flags a problem with a cell in the uploaded file, the dashboard needs to tell the user which problems still need their attention, which the tool can fix automatically, and which require going back to the source Excel file.
 
-**Decision:** A flagged cell is "fixable in the tool" if the review tab can offer the user either a dropdown of valid values to pick from or a suggested correction to accept. If there is neither a dropdown nor a suggestion, the only path forward is to fix the source Excel file and re-upload. For example, when the Sector column on a company-revenue row contains a misspelled value, the review tab offers a dropdown of the five valid sectors (Oil, Gas, Mining, Oil & Gas, Other), so the user can fix it in the tool. A blank cell in a strictly-typed numeric column has no dropdown and no suggestion, so it can only be fixed in the source file.
+**Decision:** Each flagged data cell falls into one of three buckets:
 
-**Rationale:** The user needs to know whether a flag can be cleared in the current session or whether they have to send the submission back to the data submitter. Conflating the two would either hide actionable fixes behind a generic "go fix the file" message or set the wrong expectation that every error has a dropdown.
+- **Needs your choice** — the review tab offers a dropdown of valid values; the user must pick one before the file can be confirmed. Example: a misspelled Sector value gets a dropdown of the five valid sectors (Oil, Gas, Mining, Oil & Gas, Other).
+- **Auto-fixed** — the importer's cleaner has a suggested correction that will apply automatically when the user confirms the file. The user can override the suggestion from the review tab, but doing nothing accepts it. Example: a number cell whose value carries an obvious unit suffix gets the suffix stripped and the numeric portion proposed.
+- **Source-only** — there is no dropdown and no suggestion; the only path forward is to fix the source Excel file and re-upload. Example: a blank cell in a strictly-typed numeric column.
 
-**Technical detail:** The classification is computed by `classifyFinding(f)` in `apps/web_ui/dashboard-utils.js`, which returns `'fixable'` when `f.candidates.length > 0` or `f.proposed_value` is set, and `'source_only'` otherwise. The same rule drives the BLOCKED-vs-NEEDS_REVIEW status banner in `apps/web_ui/components/dashboard.js`.
+The dashboard card for each file shows the split as two counts ("12 need your choice · 52 auto-fixed"). The All Files dashboard aggregates the same split across the batch ("3 need your choice · 12 auto-fixed across 2 files"). Source-only cells surface separately as a BLOCKED label on the file.
+
+**Rationale:** Three buckets match the three actions the user can take: pick from a dropdown, accept (or override) the cleaner's suggestion, or stop and fix the source file. Two buckets — "fixable" and "source-only" — would conflate the dropdown-picking work with the no-action-needed auto-fixed bucket, leading the user to over-count their own workload. A file showing 64 issues, all auto-fixed by the cleaner, otherwise looks like 64 outstanding tasks; splitting the count makes the actual work visible.
+
+**Technical detail:** The bucket is derived from the shape of the underlying validation finding. A finding with `candidates` populated and no cleaner `proposed_value` is "needs-choice"; a finding with `proposed_value` set is "auto-fixed"; a finding with neither is "source-only". The derivation lives on the Finding model in `packages/shared/src/shared/diagnostics.py` as a computed field `resolution_mode`, populated by a Pydantic `model_validator(mode='after')` so the value travels across the wire alongside the raw fields. Both the client gate (`isBlocked` in `apps/web_ui/blocked-status.js`) and the server gate (`validate_corrections_cover_fixable` in `packages/shared/src/shared/correction_gate.py`) read `resolution_mode` directly — a single source of truth, no parallel derivation that could drift between the two surfaces. The dashboard cards consume the same field via `classifyFinding(f)` in `apps/web_ui/dashboard-utils.js`.
 
 ### When does an error block import?
 <!-- scenario: trust-the-data; topic: data-quality-policy -->
