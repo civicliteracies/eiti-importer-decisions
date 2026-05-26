@@ -8,6 +8,45 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 ## 0. Pending Decisions
 
+### Should "Bauxite" (and other non-GFS-coded commodities) be added to the Commodity enum?
+<!-- scenario: trust-the-data; topic: pending-decisions -->
+
+**Situation:** Some country files (e.g. Guinea) report `"Bauxite"` on the project commodities field. `"Bauxite"` is not in the EITI canonical `Commodity` enum because the HS code taxonomy classifies bauxite under `"Aluminium (2606)"`.
+
+**Question:** Should we (a) add a `BAUXITE = "Bauxite"` member to the enum, (b) keep operators redirected to `"Aluminium (2606)"` via the FR→EN translation rule alias, or (c) extend the enum to a richer commodity taxonomy that EITI maintains separately? Awaiting EITI clarification on whether the HS taxonomy is the canonical reference or whether commonly-reported names like bauxite, copper concentrate, or specific ore grades deserve first-class enum membership.
+
+**Status quo:** `TranslateDropdownRule` maps `"Bauxite"` → `"Aluminium (2606)"` as an explicit alias. The proposed value validates against the existing enum so the row imports cleanly; the original cell text is preserved in the finding. Aggregations group bauxite under aluminium, which may misrepresent the commodity mix for countries where bauxite is the dominant product. The translation finding flags the substitution in the review UI.
+
+**Technical detail:** The alias lives in `FR_TO_EN_DROPDOWN` in `packages/cleaner/src/cleaner/rules.py` with a provenance comment. When EITI resolves: either add enum members to `Commodity` in `packages/parser/src/parser/domain/schemas/enums.py` and remove the alias, or document the HS-mapping convention in user-facing docs and keep the alias.
+
+---
+
+### Should the Commodity enum gain "Oil & Gas" / "Condensate" aggregates?
+<!-- scenario: trust-the-data; topic: pending-decisions -->
+
+**Situation:** Liberia and similar files report a single `"Oil, Gas, Condensates"` cell on the project commodities field — a compound aggregate, not three separate rows. The canonical `Commodity` enum has `"Crude oil (2709)"`, `"Natural gas (2711)"`, but no aggregate value covering oil+gas or a `"Condensates"` entry distinct from crude.
+
+**Question:** Should the enum gain an aggregate value covering oil+gas, or should compound reporting always require row splitting? EITI has not stated whether multi-product aggregates are a reporting style they intend to support, or whether they expect one-product-per-row exclusively.
+
+**Status quo:** `MULTI_VALUE_IN_SINGLE_FIELD` parser code fires only when the cell contains ≥2 *canonical* enum values separated by `[,;]`. `"Oil, Gas, Condensates"` does not match canonical tokens and falls through to `INVALID_DATATYPE`, surfacing in the review tab so the operator sees it. Operators reviewing Liberia-shaped files must reject the row and ask the submitter to split it, or pick a single canonical commodity from the dropdown.
+
+**Technical detail:** The compound-detection logic is `detect_compound_commodity` in `packages/parser/src/parser/domain/schemas/validation_helpers.py`. When resolved: either extend `Commodity` enum members with aggregates, or update user-facing guidance on multi-commodity reporting and keep current behaviour.
+
+---
+
+### Should multi-commodity-per-row reporting be supported, or always require row splitting?
+<!-- scenario: trust-the-data; topic: pending-decisions -->
+
+**Situation:** A row in the Projects table represents one project with one commodity. Some countries report multiple commodities in a single row using comma separators (`"Iron (2601), Gold (7108)"`).
+
+**Question:** Should the parser (a) emit a single-cell finding and require the operator to split the row in the source file, (b) auto-split the row into multiple rows during extraction, or (c) accept the compound encoding and represent it as a list field downstream? EITI has not specified whether compound encoding is valid syntax or a reporting error.
+
+**Status quo:** `MULTI_VALUE_IN_SINGLE_FIELD` parser code emits a source-only finding when ≥2 canonical commodities are detected in one cell. The operator must split the row in Excel; the cleaner does not auto-split. Files with compound rows cannot import until the operator splits them. The pipeline does not silently flatten or duplicate them.
+
+**Technical detail:** Detection is `detect_compound_commodity` in `packages/parser/src/parser/domain/schemas/validation_helpers.py`; routing through `MULTI_VALUE_IN_SINGLE_FIELD` happens in `_map_pydantic_errors` in `packages/parser/src/parser/validation/row_validator.py`. When EITI resolves: either confirm row-split is the canonical workflow (no code change) or implement auto-splitting in the parser with the appropriate downstream changes (mapper row enumeration, clean-table aggregation semantics).
+
+---
+
 ### Why are v2.x sector values unreliable?
 <!-- scenario: trust-the-data; topic: pending-decisions -->
 
@@ -157,7 +196,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** Empty cells and wrongly-filled cells have different causes (forgotten data versus wrong vocabulary), different auto-corrections apply to each, and the reviewer's action is different (look up the missing data versus confirm the proposed correction). Giving them distinct flags keeps that distinction visible from upload to import and prevents auto-fill logic from running on cells that aren't actually empty.
 
-**Technical detail:** The branch lives at lines 199–202 of `packages/parser/src/parser/validation/row_validator.py` inside `_map_pydantic_errors`: `if bad_value is None and resolved_field in model.model_fields: code = blank_cell_code_for(...)` else `code = ParserCode.INVALID_DATATYPE`. Whitespace-to-`None` normalisation happens in `validate_template_values` in `packages/parser/src/parser/domain/schemas/validation_helpers.py`. The four cleaner repair rules — `EnumCorrectionRule`, `StandardizeNotAvailableRule`, `StandardizeNotApplicableRule`, and `PlaceholderRemovalRule` — live in `packages/cleaner/src/cleaner/rules.py`.
+**Technical detail:** The dispatch lives in `_map_pydantic_errors` in `packages/parser/src/parser/validation/row_validator.py`: blank cells route to `blank_cell_code_for(...)`; cells where the BeforeValidator raised `CompoundValueError` route to `MULTI_VALUE_IN_SINGLE_FIELD`; cells whose text is a wrong-sentinel variant on the field's accepted set route to `WRONG_SENTINEL` (with the accepted sentinel injected into `candidates` for the cleaner); everything else falls through to `INVALID_DATATYPE`. Whitespace-to-`None` normalisation happens in `validate_template_values` in `packages/parser/src/parser/domain/schemas/validation_helpers.py`. The cleaner repair rules — `PlaceholderRemovalRule`, `StandardizeNotAvailableRule`, `StandardizeNotApplicableRule`, `WrongSentinelCorrectionRule` (cross-sentinel NA↔NV correction), `TranslateDropdownRule` (deterministic foreign-language → English dropdown translation), `EnumCorrectionRule`, and `MapToNotAvailableRule` — live in `packages/cleaner/src/cleaner/rules.py` and run in that order so deterministic standardisation precedes fuzzy fallback.
 
 ### Who decides whether a blank cell becomes 'Not applicable' or 'Not available'?
 <!-- scenario: cross-cutting; topic: data-quality-policy -->
