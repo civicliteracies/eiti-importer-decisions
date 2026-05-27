@@ -962,6 +962,17 @@ There is no per-request bypass. Field defined in `packages/shared/src/shared/set
 
 **Technical detail:** At `POST /sessions/confirm`, after the per-session committed-import check, the endpoint calls `EventManager.find_active_sessions_by_hash` to find every other session whose `UPLOADED` event carries the same SHA-256 and whose latest state is not in `DEDUP_INACTIVE_STATES` (terminal + IMPORTED + EXPIRED + SUBMISSION_DELETED + STALE). If any are found, the 409 body's `conflicts[]` entry for that session has `kind: "inflight_sibling"` and carries `sibling_session_ids`, `sibling_batch_ids`, and a `release_actions` list — one entry per sibling session, plus one per sibling batch. Every entry points at `POST /sessions/kill` with a ready-to-submit `body` (either `{session_ids: [<sid>]}` or `{session_ids: [<every member of the batch>]}`). The caller picks an entry and POSTs the carried body as-is. Sibling lookup in `EventManager.find_active_sessions_by_hash` at `packages/shared/src/shared/session/event_manager.py`. Response shape assembled in `confirm_sessions` at `apps/api/src/api/session_endpoints.py`. The kill endpoint writes a `CANCELLED` event and deletes the cached `PipelineContext` for every listed non-terminal session, which releases the hash slot immediately. The CLI surfaces the choice via a `questionary` prompt.
 
+### Where does the website read from — the clean tables, the metadata tables, or something else?
+<!-- scenario: cross-cutting; topic: import-behavior -->
+
+**Situation:** The EITI website needs to show payment lists, country-by-sector breakdowns, SOE lists, and assessment results. Each of these is a join across several lower-level tables. If every page wrote its own SQL, the same joins would be reimplemented many times, and a column rename in a lower table would silently break some pages without breaking others.
+
+**Decision:** The website (and any other consumer — CLI reports, dashboards, embedded views) reads only from `view_*` tables. It never queries `clean_*`, `metadata_*`, or `ledger_*` directly. The view definitions in `view_queries.py` are the *only* place that knows how to join the lower tiers into a consumer-shaped result.
+
+**Rationale:** Two reasons. First, when a column moves between lower-tier tables — for example, `is_supporting_company` moved from `metadata_companies` to `clean_company_annual_details` because we realised the flag varies year-to-year — only the view's SELECT changes. Every consumer keeps working. Second, the joins themselves are non-trivial (USD conversion math, sector fan-out, GROUP_CONCAT'd sectors) and live in one place. A bug fix in the view propagates to every consumer at once.
+
+**Technical detail:** Views are declared in `schema/eiti_db_v1_6.dbml` and materialised in `packages/shared/src/shared/view_queries.py`. The `create_views()` function runs at startup (`init_target_db`) and uses DROP-then-CREATE so the SQL always matches what's in code. A view the DBML declares but no consumer reads remains unbuilt; the list lives in `PLANNED_UNBUILT_VIEWS` in `tests/unit/test_view_queries.py` with a one-line rationale per entry. To add a consumer that needs a planned-unbuilt view, materialise it in `view_queries.py` and remove the entry from the planned list. See `docs/concepts/schema.md` for the design model behind the four-tier split.
+
 ---
 
 ## 8. Version Differences
