@@ -910,6 +910,26 @@ Rows whose currency cell is blank or carries a sentinel ("Not applicable", "Not 
 
 **Technical detail:** Implemented in `TargetDbManager._do_delete` at `packages/shared/src/shared/session/target_db_manager.py`. Clean-table and ledger rows for the `eiti_id_declaration` are hard-deleted in FK order (clean tables first, then ledger tables). The `metadata_summary_data_files` row is soft-deleted (`is_deleted = 1`) rather than removed, and a `metadata_import_events` row with `event_type = submission_deletion` is written carrying the responsible user's name, email, role, channel, and a `log_summary` of how many rows were deleted from each table. The `metadata_users` row for the deleter is inserted alongside it. The hash lookup that enforces upload dedup filters with `NOT EXISTS (SELECT 1 FROM metadata_summary_data_files WHERE import_event_id = ie.id AND is_deleted = 1)` so soft-deleted prior imports do not block a fresh upload.
 
+### What happens to a Validation Data Query upload's rows when the operator deletes it?
+<!-- scenario: submit-a-report; topic: import-behavior -->
+
+**Situation:** An operator uploads a Validation Data Query export and later deletes that upload from the data management tab.
+
+**Decision:** Deleting an upload removes the validation rows that upload contributed. If a country-year (e.g. Liberia 2017) was uploaded by another file that is still active, that other upload's rows are preserved. If the deleted upload was the only source for a country-year, the validation rows for that country-year are removed from the database; re-uploading the same file restores them.
+
+**Rationale:** Each upload owns the rows it created — the delete cascade keys on `validation_file_id` rather than the cross-import validation key. This keeps deletion semantics symmetric with other families (SDF, Company Assessment): an operator deleting their upload removes their data; another operator's concurrent upload of the same cohort is untouched.
+
+**Technical detail:** The durable rows live in `metadata_validations`, `metadata_validation_scores`, and `metadata_validation_links`. Each row carries a `validation_file_id` foreign key to `metadata_validation_files`. The delete cascade walks `family.cascade_metadata_models` and runs `DELETE WHERE validation_file_id = :uuid` for the deleted upload only. Rows whose `validation_file_id` points at any other active upload are unaffected. `metadata_validation_requirements` is hand-curated and pre-seeded at `init_target_db`; it is never written to during an import and is unaffected by deletion.
+
+### A Validation Data Query export surfaces 100+ country-year cohorts in a single file
+<!-- scenario: submit-a-report; topic: import-behavior -->
+
+**Situation:** An operator uploads a Validation Data Query export to the EITI Data Importer. The file represents many country-year EITI Board validation decisions in one workbook.
+
+**Decision:** The cohort grain is per `(country, decision_year)` — every EITI Board decision in the file gets its own selectable cohort row. A typical export surfaces 100+ cohorts spanning roughly 50 countries. When the picker shows 10 or more cohorts and at least one cohort carries a recognisable country code, cohorts are grouped under per-country headers with an expand/collapse toggle; selecting a country header selects every year for that country. Cohorts without a recognisable country code fall into a sentinel `"Other"` group rendered last.
+
+**Rationale:** Each country-year decision is independent and can be re-uploaded or deleted on its own — coarser grain (per-country, per-file) would make it impossible to update a single year without re-publishing the whole export. The grouping UX matches the operator's mental model ("import all of Liberia") while preserving per-year granularity for the cases where a single year is being corrected.
+
 ### What does the user have to do to delete a declaration?
 <!-- scenario: audit-who-did-what; topic: import-behavior -->
 
