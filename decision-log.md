@@ -93,11 +93,11 @@ The dashboard card for each file shows the split as two counts ("12 need your ch
 ### When is a review required before import?
 <!-- scenario: trust-the-data; topic: data-quality-policy -->
 
-**Situation:** The importer has flagged problems, but every one of them is fixable in the tool — each comes with either a dropdown or a suggested correction. Some cross-file consistency warnings may also be present (unregistered companies, per-row currency mismatches, and so on), but no source-only error.
+**Situation:** The importer has flagged problems, but every one of them is fixable in the tool — each comes with either a dropdown or a suggested correction. Some cross-file consistency warnings may also be present (unregistered companies, dominance of a non-reporting currency on a revenue table, and so on), but no source-only error.
 
 **Decision:** The dashboard lands on NEEDS_REVIEW rather than SUCCESS. The user can proceed to import, but only after acting on every fixable flag — either accepting the suggested correction or picking from the dropdown. Consistency warnings do not have to be resolved; they only have to be visible to the user before they confirm.
 
-**Rationale:** A fixable flag left untouched would commit a row with a null or default value into a column the source didn't actually fill. Consistency warnings need human judgement (a company registered under a slightly different spelling is legitimate; a payment in EUR against a Ghana-reporting file is suspicious), so the right action is to surface them and require the user to look, not to auto-block.
+**Rationale:** A fixable flag left untouched would commit a row with a null or default value into a column the source didn't actually fill. Consistency warnings need human judgement (a company registered under a slightly different spelling is legitimate; a Ghana-reporting file whose government revenue rows are 85% USD is suspicious), so the right action is to surface them and require the user to look, not to auto-block.
 
 **Technical detail:** The dashboard branch is in `apps/web_ui/components/dashboard.js`; the import-time enforcement of "every fixable finding must be covered" lives in the `correction_gate.validate_corrections_cover_fixable` helper in `packages/shared/src/shared/correction_gate.py`, called by `BatchManager.bulk_review` (via `POST /sessions/review`). The bulk endpoint applies the gate per session and returns HTTP 422 with per-session failure detail if any uncovered validation finding remains in any listed session.
 
@@ -795,38 +795,54 @@ On a tablet in portrait (between about 480 and 768 pixels), the Files pane stays
 
 **Technical detail:** `_check_table_completeness` in `packages/crosschecker/src/crosschecker/crosschecker_service.py` emits `GOV_REVENUE_TABLE_EMPTY` / `COMP_PAYMENTS_TABLE_EMPTY`. Table names are read from `TABLE_KEYS` in `packages/shared/src/shared/submission_metadata.py`, keyed by SubmissionID. The check is deliberately silent on missing tables to avoid duplicating upstream parser findings (`SHEET_NOT_FOUND`, `BLOCK_PARSING_ERROR`).
 
-### When does the tool flag a per-row currency mismatch?
+### When does the tool flag a currency-declaration contradiction?
 <!-- scenario: reconcile-government-vs-companies; topic: consistency-rules -->
 
-**Situation:** In v2.0 and v2.1, every Part 4 row and every Part 5 row carries its own currency code. The About sheet separately declares the file's overall reporting currency. A row reporting a payment in a currency other than the file's reporting currency needs an explicit conversion before it can be reconciled.
+**Situation:** In v2.0 and v2.1, every government-revenues row and every company-payments row carries its own currency code. The About sheet separately declares the file's overall reporting currency. A handful of rows in a different currency is normal — multinational extractive companies routinely pay royalties or signature bonuses in USD even when the country reports in its local currency. But if every row on a side uses the same non-reporting currency, the About declaration contradicts the data and one of the two is wrong.
 
-**Decision:** For each row in the government-revenues and company-payments tables, the tool reads the row's currency cell and compares it to the About-sheet reporting currency. Any difference produces a warning the reviewer has to acknowledge, naming the row, the row's currency, and the reporting currency. A blank currency cell on the row is treated as "inherits from the About sheet" and not flagged. V1 files have no per-row currency columns, so the check doesn't run on them at all.
+**Decision:** For each side (government revenues, company payments), the tool aggregates currency usage across all non-sentinel rows and reports two tiers of finding:
 
-**Rationale:** Reconciliation assumes all rows on a side share a currency. A mixed-currency table can be legitimate — a country may collect some streams in USD and the rest in the local currency — but it requires the exchange rate to be present and applied correctly. The warning tells the reviewer to verify the conversion before approving the import.
+- **Hard contradiction** — every non-sentinel row on a side uses the same non-reporting currency. The tool emits one finding on the About-sheet `reporting_currency` cell and blocks import until the operator corrects either the About declaration or the affected rows. Re-uploading the corrected file clears the block; alternatively, the operator can supply a correction in the review tab that updates the declared currency to match the data.
+- **Dominance signal** — at least 80% (but not 100%) of rows on a side use one non-reporting currency. The tool emits a warning naming the affected table and the dominant currency. The warning is informational; the operator can proceed without changing the file.
 
-**Technical detail:** `_check_currency_consistency` and `_collect_currency_mismatches` in `packages/crosschecker/src/crosschecker/crosschecker_service.py` emit `GOV_CURRENCY_MISMATCH` and `COMP_CURRENCY_MISMATCH`. Per-row field names come from `CURRENCY_FIELD` in `packages/shared/src/shared/submission_metadata.py` — v2.0/v2.1 gov rows use `currency`, comp rows use `reporting_currency`; v1 has `null` for both, which short-circuits the check.
+Rows whose currency cell is blank or carries a sentinel ("Not applicable", "Not available") are excluded from the percentage calculation — the tier is over rows with real currency data.
 
-### What happens to per-row currency checks if the reporting currency is missing?
+**Rationale:** The earlier per-row mismatch rule produced thousands of warnings across the v2 corpus, dominated by legitimate multinational USD payments on local-currency-reporting files. The aggregate predicate separates two distinct error modes: the reporter wrote the wrong currency in the About cell (every row contradicts), versus most-but-not-all of the file uses a non-reporting currency (the reporter chose to report in the dominant denomination but declared otherwise). The first is a hard error worth blocking on; the second is worth surfacing to a reviewer but not gating import. The 80% threshold gives a comfortable margin: files with handfuls of multinational rows sit well below it; files where a country reports almost entirely in USD against a local-currency declaration sit well above.
+
+**Technical detail:** `_make_currency_consistency_check` and `_evaluate_currency_dominance` in `packages/shared/src/shared/families/sdf.py` produce two finding codes. `CURRENCY_DECLARATION_MISMATCH` lands on `(table_name="about", table_row_index=0, field_name="reporting_currency")` with `category=FindingCategory.VALIDATION`; the model_validator on `Finding` derives `resolution_mode=SOURCE_ONLY` from the empty `proposed_value`/`candidates`, and `correction_gate.validate_corrections_cover_fixable` blocks import until a `USER_CHOICE` correction at the same coordinate clears it. `CURRENCY_MOSTLY_NON_REPORTING` lands on the affected revenue table with `category=FindingCategory.CROSSCHECK` and never blocks. Thresholds live on two module-level constants — `_CURRENCY_CONTRADICTION_THRESHOLD = 1.0` and `_CURRENCY_DOMINANCE_THRESHOLD = 0.80`. Production-value currency (Part 3 Projects `currency` and v2.1 `cost_currency`) is intentionally out of scope — only revenue tables are checked.
+
+### Should a 100% currency contradiction block import, or should it warn like the 80% case?
+<!-- scenario: reconcile-government-vs-companies; topic: pending-decisions -->
+
+**Situation:** The aggregate currency check has two tiers — a strict 100% rule that blocks import via a VALIDATION finding on the About sheet, and an 80% rule that produces an informational warning. The blocking decision is the load-bearing one: it forces the operator to re-upload (or pick a USER_CHOICE correction in the review tab) before they can proceed.
+
+**Question:** Is the 100% rule the right severity, or should every currency contradiction land as an informational warning that the operator can acknowledge and proceed past? Two outcomes would push toward downgrading: operators consistently telling us the blocking finding is hard to resolve through the review tab (the SOURCE_ONLY UX requires either a re-upload or a typed USER_CHOICE), or discovery of a legitimate use case where a country reports entirely in USD against a non-USD About declaration by convention. Two outcomes would push toward keeping blocking: a 100%-non-reporting side is a strict contradiction that should not silently land in the database, and re-upload is the right escape valve for genuine declaration typos.
+
+**Status quo:** The 100% rule blocks. The pending decision is whether to keep that behaviour after operator feedback rolls in. The 80% informational tier is unaffected by this question — the dominance signal is non-blocking either way.
+
+**Technical detail:** The blocking-vs-informational distinction is `category=FindingCategory.VALIDATION` vs `category=FindingCategory.CROSSCHECK` on `Finding` emission in `_make_currency_consistency_check`. Switching the 100% case from blocking to informational is a one-line change — flip the category on the emission site and rename the code accordingly. The change does not require updating the threshold constants, the dominance helper, or the test fixtures.
+
+### What happens to currency checks if the reporting currency is missing?
 <!-- scenario: reconcile-government-vs-companies; topic: consistency-rules -->
 
 **Situation:** The About sheet doesn't declare a reporting currency, but the file is v2.0 or v2.1 so each row in Part 4 and Part 5 still carries its own currency cell.
 
-**Decision:** The tool produces a single warning the reviewer has to acknowledge — "no reporting currency on the About sheet" — and skips the per-row currency check entirely. No per-row currency-mismatch warnings are produced.
+**Decision:** The tool produces a single warning the reviewer has to acknowledge — "no reporting currency on the About sheet" — and skips the aggregate currency check entirely. No declaration-mismatch or dominance findings are produced.
 
-**Rationale:** Without a reference currency on the About sheet, there is nothing to compare each row against. Emitting one warning per row would flood the review screen with noise that all points at the same root cause. One warning against the About sheet tells the reviewer exactly which field needs to be filled in the source file.
+**Rationale:** Without a reference currency on the About sheet, there is nothing to compare each row against. The single warning tells the reviewer exactly which field needs to be filled in the source file. In practice this rarely fires — the parser typings require a valid `reporting_currency` value on the About row, so a blank cell surfaces as a parser-level validation error before the crosschecker runs. The crosscheck finding is the safety net for any path that bypasses the parser-level check.
 
-**Technical detail:** The single finding code is `NO_REPORTING_CURRENCY`, emitted by `_check_currency_consistency` in `packages/crosschecker/src/crosschecker/crosschecker_service.py` against the About table. The per-row loops (`_collect_currency_mismatches`) are guarded behind a presence check on the About-sheet currency value.
+**Technical detail:** The single finding code is `NO_REPORTING_CURRENCY`, emitted by `_make_currency_consistency_check` in `packages/shared/src/shared/families/sdf.py` against the About table. The aggregate-tier predicate is guarded behind a presence check on the About-sheet currency value.
 
 ### Do consistency warnings block import?
 <!-- scenario: trust-the-data; topic: consistency-rules -->
 
-**Situation:** The tool has produced consistency warnings — unregistered Part 5 entities, mismatched revenue streams, currency mismatches, empty tables, or totals discrepancies.
+**Situation:** The tool has produced consistency warnings — unregistered Part 5 entities, mismatched revenue streams, currency dominance signals, empty tables, or totals discrepancies.
 
-**Decision:** No. Consistency warnings set the file's status to NEEDS_REVIEW but never to BLOCKED. Only structural problems in the source file (a missing required cell, a wrongly-typed value) block import. The reviewer acknowledges each consistency warning in the review screen and can then proceed to Confirm Import.
+**Decision:** As a rule, no. Consistency warnings set the file's status to NEEDS_REVIEW but never to BLOCKED. Only structural problems in the source file (a missing required cell, a wrongly-typed value) block import. The reviewer acknowledges each consistency warning in the review screen and can then proceed to Confirm Import. The single exception is the currency-declaration contradiction — when every row on a revenue side uses one non-reporting currency, the About declaration is treated as a wrongly-typed value and blocks (see "When does the tool flag a currency-declaration contradiction?").
 
-**Rationale:** Consistency warnings often have legitimate explanations — an entity registered under a slightly different spelling, a deliberate currency mix in a country's reconciliation, a known data quirk the country team wants to import anyway. Forcing the country team to re-export the source file for every unregistered-name warning would block routine work for cases that don't actually require correction. Leaving the gate to a human reviewer matches the warning's actual meaning: "worth a look", not "definitely wrong".
+**Rationale:** Consistency warnings often have legitimate explanations — an entity registered under a slightly different spelling, a deliberate currency mix in a country's reconciliation, a known data quirk the country team wants to import anyway. Forcing the country team to re-export the source file for every unregistered-name warning would block routine work for cases that don't actually require correction. Leaving the gate to a human reviewer matches the warning's actual meaning: "worth a look", not "definitely wrong". The currency-contradiction exception is the case where the declared reporting currency does not appear in the data at all — silently importing rows under a fictitious declaration would commit a wrong number into the database.
 
-**Technical detail:** All crosscheck findings carry `FindingCategory.CROSSCHECK` and raise session status to `NEEDS_REVIEW`. Only `FindingCategory.VALIDATION` errors raise it to `BLOCKED`. Status arbitration happens in the session-status logic in the API layer.
+**Technical detail:** Most crosschecker findings carry `FindingCategory.CROSSCHECK` and raise session status to `NEEDS_REVIEW`. `FindingCategory.VALIDATION` errors raise it to `BLOCKED` — that's where parser-emitted per-cell validation findings land, plus the crosschecker's `CURRENCY_DECLARATION_MISMATCH` finding. Status arbitration happens in the session-status logic in the API layer; gating is enforced by `correction_gate.validate_corrections_cover_fixable` in `packages/shared/src/shared/correction_gate.py`.
 
 ### What does the tool do with 'Total' rows already in the file?
 <!-- scenario: trust-the-data; topic: consistency-rules -->
