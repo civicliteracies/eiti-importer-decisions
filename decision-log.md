@@ -659,6 +659,17 @@ On a tablet in portrait (between about 480 and 768 pixels), the Files pane stays
 
 **Technical detail:** The penalty is the `score *= 0.5  # 50% penalty for wrong sheet` line in `check_standard_table` and the matching `score *= 0.5  # 50% penalty for renamed sheet` line in `check_kvp`, both in `packages/parser/src/parser/identification/matcher.py`.
 
+### What language does the database accept for incoming files?
+<!-- scenario: submit-a-report; topic: template-recognition -->
+
+**Situation:** Some implementing countries publish their EITI summary data in French or Spanish — for example, Chad submits FR-only files, Mexico publishes both EN and SP variants of each year. The parser's templates, dropdown vocabulary, and table names are all defined in English.
+
+**Decision:** The database is English-canonical. The tool reads English files directly. Files in French or Spanish are not accepted into the database without first being converted to the English form of the same template. The original-language file is preserved on PortalJS (the upstream catalog) as the source-of-truth artefact; the tool stores the English-form version of the data.
+
+**Rationale:** The parser, cleaner aliases, and downstream consumers (dashboards, crosschecker, exports) all assume one canonical vocabulary. Supporting multi-language input directly inside the parser would require every schema, validator, and lookup to be language-aware — a structural change that affects every consumer. Keeping the database English-canonical and converting files at the curation boundary means each subsystem stays simple and the conversion is auditable as a single artefact (the manifest of EN ↔ FR/ES translations).
+
+**Technical detail:** A French- or Spanish-language file is converted to its English form by `scripts/corpus_build/normalize_localized.py apply --lang <fr|es>`, driven by the manifest at `scripts/corpus_build/translations/v2.toml`. The normalizer renames sheets, rewrites known label cells, and freezes VLOOKUP formulas with their cached values. The cleaner's `FR_ALIAS_LOOKUP` and `ES_ALIAS_LOOKUP` in `packages/shared/src/shared/sdf_vocabulary.py` cover localized data values (enum dropdowns, country names) that the normalizer doesn't touch. Both layers must agree: a new FR/ES label belongs in the manifest; a new FR/ES data-value spelling belongs in the cleaner's `*_TRANSLATIONS` tables.
+
 ---
 
 ## 5. Entity Resolution
