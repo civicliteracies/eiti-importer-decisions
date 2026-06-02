@@ -897,6 +897,24 @@ Rows whose currency cell is blank or carries a sentinel ("Not applicable", "Not 
 
 ---
 
+### What does the tool do with a Headquarters cell that carries both city and country?
+
+<!-- scenario: trust-the-data; topic: consistency-rules -->
+
+**Situation:** The Company Assessment template's `Headquarters` column is a free-text cell operators populate as `"<city>, <country>"` (e.g. `"London, UK"`, `"Pittsburgh, Pennsylvania, USA"`, `"Lagos (Nigeria)"`). Two pieces of information live in one cell.
+
+**Decision:** Both the city and the country survive end-to-end. The parser splits the cell into a structured `HeadquartersLocation` carrying `city` and `country`. The dashboard reads both sub-slots — the country drives region grouping; the city renders alongside for display. The canonical company row stores them in two columns (`hq_country_iso3`, `hq_city`).
+
+The crosscheck between Company reference and Assessment data fires on the COUNTRY sub-slot only: two rows declaring the same company at `"London, UK"` and `"Bristol, UK"` are NOT a mismatch (same country); two rows at `"London, UK"` and `"London, USA"` are.
+
+When the country sub-slot cannot resolve (e.g. `"Denver, CO USA"`, `"Bogor, Atlantis"`), the tool flags `INVALID_HEADQUARTERS_COUNTRY` and the cleaner re-walks the cell more aggressively against the country-alias table. When a unique country resolves (`"USA"` inside `"CO USA"`), the cleaner proposes the resolved ISO-3 against the country sub-slot only — the city stays whatever the operator typed. When nothing resolves (prose like `"Irving, Texas (headquarters moving to Houston in June 2023)"`), the operator picks from the country dropdown in the review tab.
+
+**Rationale:** The pre-compound shape collapsed the cell to a single ISO-3 token and discarded the city. Three downstream effects: the dashboard's per-region heatmap had nothing to render city-level context; row-level Pydantic failures (e.g. `type = "Public"` not in `CompanyType`) dropped the resolved country back to the raw composite string and the heatmap silently fell back to grey; the crosschecker compared on the raw cell text and false-positived city-only divergences. Preserving both sub-slots fixes all three.
+
+**Technical detail:** `HeadquartersLocation` + `parse_headquarters_location` in `packages/parser/src/parser/domain/schemas/validation_helpers.py`. Row-failure preservation via the BeforeValidator augmentation block in `packages/parser/src/parser/validation/row_validator.py`. Sub-slot dispatch via `CohortField.sub_slot` in `packages/shared/src/shared/families/_cohort_field.py`. Cleaner rule: `HeadquartersCountryResolutionRule` in `packages/cleaner/src/cleaner/rules.py`. Architecture rationale: ADR-026.
+
+---
+
 ## 7. Import Behavior
 
 ### What happens if the user re-imports a declaration?
@@ -913,13 +931,24 @@ Rows whose currency cell is blank or carries a sentinel ("Not applicable", "Not 
 ### What happens to reference data from multiple files of the same country?
 <!-- scenario: cross-cutting; topic: import-behavior -->
 
-**Situation:** Two declarations from the same country are imported. Both files mention the same currency, the same GFS codes, and some of the same companies, agencies, and projects.
+**Situation:** Two declarations from the same country are imported. Both files mention the same currency, the same GFS codes, and some of the same controlled-vocabulary rows.
 
-**Decision:** Shared reference values (country, currency, GFS code) and shared entities (the same company, agency, or project named in both files) are written once. The second file's copies are silently skipped rather than duplicated. The file-summary record is the one exception: when the same declaration is re-imported, its file-summary record is overwritten rather than skipped.
+**Decision:** Shared reference values (country, currency, GFS code) and shared name-dedup vocabularies (sector, commodity) are written once. The second file's copies are silently skipped rather than duplicated. The file-summary record is the one exception: when the same declaration is re-imported, its file-summary record is overwritten rather than skipped.
 
-**Rationale:** Each file carries its own copy of the reference rows it needs — there's no separate "load the reference data once" step. Allowing each file to act self-contained while still converging on a single entry per real-world country, currency, company, agency, or project keeps the dashboard's lists clean.
+**Rationale:** Each file carries its own copy of the reference rows it needs — there's no separate "load the reference data once" step. Allowing each file to act self-contained while still converging on a single entry per real-world reference value keeps the dashboard's lists clean.
 
-**Technical detail:** Every metadata write uses `INSERT OR IGNORE`. Reference tables (`metadata_countries`, `metadata_currencies`, `metadata_gfs_codes`, `metadata_submission_types`) dedupe on their natural-key primary key. Entity tables (`metadata_companies`, `metadata_gov_entities`, `metadata_projects`) and name-dedup tables (`metadata_sectors`, `metadata_commodities`) dedupe on their unique business keys. The `metadata_summary_data_files` row is the only metadata write that uses upsert (`ON CONFLICT DO UPDATE` on `eiti_id_declaration`) because a re-import legitimately replaces that record. Table classification lives in `_UPSERT_TABLES`, `_ENTITY_TABLES`, and `_METADATA_TABLES` in `packages/importer/src/importer/import_service.py`. The write path for all of them is `_write_metadata_rows`, which calls `generate_insert(model_cls, or_ignore=True)`.
+**Technical detail:** Reference and name-dedup writes use `INSERT OR IGNORE`. Reference tables (`metadata_countries`, `metadata_currencies`, `metadata_gfs_codes`, `metadata_submission_types`) dedupe on their natural-key primary key; name-dedup tables (`metadata_sectors`, `metadata_commodities`) dedupe on their unique business keys. The `metadata_summary_data_files` row is the only metadata write that uses upsert (`ON CONFLICT DO UPDATE` on `eiti_id_declaration`) because a re-import legitimately replaces that record. Canonical entity tables (`metadata_companies`, `metadata_gov_entities`, `metadata_projects`) take a different path — see the next decision — because multiple sources legitimately contribute attributes to the same canonical entity row.
+
+### What happens to a company across multiple submissions and over time?
+<!-- scenario: cross-cutting; topic: import-behavior -->
+
+**Situation:** "AcmeCorp" appears on Norway's 2022 SDF (declaring `hq_country_iso3=NOR`), on UK's 2023 SDF (declaring no HQ), and on a Company Assessment file from 2024 (declaring `headquarters=GBR`, `legal_entity_id=ABC123`, `sectors=["Mining"]`).
+
+**Decision:** One canonical `metadata_companies` row is maintained per company business key (`eiti_id_company`). Each submission's contribution updates the row using SCD2 close+open semantics: identical re-writes are no-ops; material differences close the previous row and open a new one with the merged attributes (incoming non-null values win; existing values for columns the incoming row leaves null are preserved). Historical state is therefore queryable — operators can ask "what did we know about AcmeCorp in 2023?".
+
+**Rationale:** Canonical entities exist independently of any single file (a company is a real-world thing, not a per-file disclosure). Multiple submissions legitimately contribute different attributes to the same entity over time. SCD2 lets all contributions co-exist without overwriting or fragmenting the entity; it also survives file deletion — deleting one submission removes that submission's ledger rows but the canonical entity row stays so other submissions referencing it continue to resolve. Per-import disclosure tables (subsidiary relationships, validation events) use a different mechanism — see the Subsidiaries decision below.
+
+**Technical detail:** Implemented in `packages/importer/src/importer/import_service.py::_apply_scd2_writes` — the SCD2 close+open helper called from `_write_metadata_rows` for every table in `_ENTITY_TABLES`. Business keys are declared in `_ENTITY_BUSINESS_KEYS`. The `tests/unit/test_metadata_companies_scd2_invariant.py` invariants pin: no double-current; merge preserves existing where incoming is null; idempotent re-write is no-op; close+open under material diff; deterministic timestamps under frozen clock. ADR-025 codifies which metadata tables qualify for SCD2 (canonical entities) vs which use the per-import composite UNIQUE mechanism (disclosure rows).
 
 ### What is kept when a declaration is deleted?
 <!-- scenario: audit-who-did-what; topic: import-behavior -->
@@ -942,6 +971,17 @@ Rows whose currency cell is blank or carries a sentinel ("Not applicable", "Not 
 **Rationale:** Each upload owns the rows it created — the delete cascade keys on `validation_file_id` rather than the cross-import validation key. This keeps deletion semantics symmetric with other families (SDF, Company Assessment): an operator deleting their upload removes their data; another operator's concurrent upload of the same cohort is untouched.
 
 **Technical detail:** The durable rows live in `metadata_validations`, `metadata_validation_scores`, and `metadata_validation_links`. Each row carries a `validation_file_id` foreign key to `metadata_validation_files`. The delete cascade walks `family.cascade_metadata_models` and runs `DELETE WHERE validation_file_id = :uuid` for the deleted upload only. Rows whose `validation_file_id` points at any other active upload are unaffected. `metadata_validation_requirements` is hand-curated and pre-seeded at `init_target_db`; it is never written to during an import and is unaffected by deletion.
+
+### What happens to a Company Assessment upload's subsidiary disclosures when the operator deletes it?
+<!-- scenario: submit-a-report; topic: import-behavior -->
+
+**Situation:** An operator uploads a Company Assessment file containing Subsidiaries sheets that disclose parent → subsidiary relationships across years. The operator later deletes the upload.
+
+**Decision:** Each upload owns the subsidiary relationship rows it created. Deleting an upload removes those rows. Re-importing a different file's same-year cohort starts fresh (cohort dedup blocks same-year re-imports until the prior is deleted). If two distinct Company Assessment files legitimately disclose the same subsidiary in the same year (one country's file and another country's file both list AcmeCorp → AcmeSub for 2023), both upload's rows co-exist — the natural key is `(assessment_file_id, parent_company_name, child_company_name, assessment_year)` so distinct uploads produce distinct rows.
+
+**Rationale:** Subsidiary disclosures are per-import events, not canonical entities — they describe what one file said at one point in time. Symmetric with the Validation Data Query family's per-import deletion: the operator who deleted their file removes their data; another operator's concurrent upload is untouched. A composite UNIQUE on the natural per-import key rejects accidental within-file duplicate disclosure rows; the importer surfaces those as `DUPLICATE_RELATIONSHIP_ROW_IN_FILE` findings without crashing the import.
+
+**Technical detail:** `metadata_company_relationships` is registered in COMPANY_ASSESSMENT's `cascade_metadata_models`. The delete cascade walks `family.cascade_metadata_models` and runs `DELETE WHERE assessment_file_id = :uuid` for the deleted upload only. The composite UNIQUE index is declared via `MetadataCompanyRelationships.__unique_indexes__` over `(assessment_file_id, parent_company_name, child_company_name, assessment_year)`. ADR-025 codifies why this table is per-import rather than SCD2 (the row identity is the disclosure event, not the canonical relationship).
 
 ### A Validation Data Query export surfaces 100+ country-year cohorts in a single file
 <!-- scenario: submit-a-report; topic: import-behavior -->
