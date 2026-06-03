@@ -97,6 +97,28 @@ The dashboard card for each file shows the split as two counts ("12 need your ch
 
 **Technical detail:** Implemented in `qualityBand(score)` in `apps/web_ui/dashboard-utils.js` (`>= 80 → 'good'`, `>= 50 → 'warn'`, otherwise `'bad'`; `null` → `'unknown'`).
 
+### What does the "Schema Deviations" dashboard section mean?
+<!-- scenario: trust-the-data; topic: data-quality-policy -->
+
+**Situation:** EITI templates have evolved across versions, and submitters sometimes use column headers that match an earlier template's wording. The v2.0 and v2.1 templates also have a known fault on Part 5: the Sector column auto-fills from the wrong source column on Part 3, so the Sector cell ends up holding a company registration number or a company type string instead of a real sector value.
+
+**Decision:** When the tool accepts a column under a header variant (for example "Full company name" mapped to the canonical "company"), or repairs a Part 5 Sector cell by looking the company name up in Part 3, it surfaces what it did in a "Schema Deviations" dashboard section without blocking the import. The status badge at the top of the page stays "Ready" for these cases. The single exception is the ambiguous-sector case — two or more Part 3 rows for the same company name with conflicting sectors — which bumps the badge to "Needs review" because the tool used a last-written-wins choice the operator should reconcile in the source file.
+
+**Rationale:** The data lands correctly in the database either way: variant headers map to canonical fields, recovered sectors are the operator's intended value. Surfacing the deviations gives the operator a record of what the tool auto-resolved, which they may want to flag for next year's submission (use the canonical header) or pass to the report's data-entry team (reconcile ambiguous sectors at source). Bumping the badge only for the ambiguous case matches the rule that "Needs review" means there is something the operator should look at — the other deviations are informational and need no action.
+
+**Technical detail:** The Sector fault is the v2.x template's VLOOKUP formula pulling from the wrong source column on Part 3. Backed by `ParserCode.NON_CANONICAL_HEADER_USED`, `VLOOKUP_SECTOR_RECOVERED`, and `VLOOKUP_SECTOR_AMBIGUOUS` (`packages/shared/src/shared/diagnostics.py`). Rendering goes through `formatSchemaDeviationSummary(findings, extractedData)` in `apps/web_ui/dashboard-utils.js`, called from the dashboard component between the "Cross-table Checks" and "Validation Errors" sections. The "Needs review" bump uses the `isSchemaDeviationActionable(finding)` predicate, the single source of truth for which codes warrant operator attention.
+
+### How is the "Expectations Met" percentage computed for Company Assessment files?
+<!-- scenario: trust-the-data; topic: data-quality-policy -->
+
+**Situation:** A Company Assessment file lists EITI expectations (typically eight to ten) for each supporting company. Each expectation cell carries one of four values: Met, Not Met, Partially Met, or N/A. N/A means "this expectation doesn't apply to this company" — for example, a company in extraction doesn't need the production-licence expectation.
+
+**Decision:** The dashboard's "Expectations Met" headline percentage is the share of *applicable* expectations that were met: `Met ÷ (Met + Not Met + Partially Met)`, rounded to the nearest whole percent. N/A cells are counted separately and excluded from this denominator. Partially Met cells count toward the denominator but not the numerator. When every cell is N/A — a legitimate but rare case — the headline shows nothing rather than a divide-by-zero artefact.
+
+**Rationale:** Including N/A in the denominator would dilute the metric in a way operators don't expect. A company where eight of nine expectations don't apply but the one applicable was met would read as roughly 11% met, when the operator-meaningful answer is 100% of applicable expectations met. Excluding N/A makes cross-country comparisons about coverage quality rather than about how many expectations each country chose to omit. Treating Partially Met as not-met in the numerator (but counted in the denominator) reflects the strict-met rate; the per-bucket card row still shows the Partially Met count separately so a country with high partial coverage isn't invisible.
+
+**Technical detail:** Computed by `computeCoverageHeadline({ met, notMet, partial })` in `apps/web_ui/dashboard-utils.js`, called from the coverage card render in `apps/web_ui/components/dashboard.js`. The function returns `{ applicable, pct }` or `null` (when applicable is zero). Bucket counts come from `computeCoverageStats` in `apps/web_ui/stats.js`, which walks the per-year `assessment_data_{year}` tables and classifies each expectation cell against the canonical Met/Not Met/Partially Met/N/A lists in the wire-side `CoverageStatsConfig`.
+
 ### Are template placeholders treated as data?
 <!-- scenario: trust-the-data; topic: data-quality-policy -->
 
