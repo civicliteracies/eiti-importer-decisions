@@ -249,7 +249,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** Marking a cell "Not applicable" is a claim about *why* the cell is empty: the field structurally doesn't apply given the rest of the record. Only the early row-level check has the whole row in hand, so only that check can defensibly make the claim. The later auto-fill sees individual flagged cells one at a time, without the rest of the row, so its safe behaviour is conservative: a non-blocking blank means "this data is missing", not "this data doesn't belong here".
 
-**Technical detail:** The row-aware logic lives in `@model_validator(mode="before")` methods on the row models — see `cascade` on `CompanyRevenueRow` in `packages/parser/src/parser/domain/schemas/v2p1.py` and the shared helper `cascade_metadata_row_na` in `packages/parser/src/parser/domain/schemas/validation_helpers.py`. The "Not available" auto-fill is `MapToNotAvailableRule` in `packages/cleaner/src/cleaner/rules.py`, gated on `f.code == ParserCode.BLANK_CELL` — it never matches `BLANK_CELL_DEPENDENT` or `BLANK_CELL_BLOCKING`.
+**Technical detail:** The row-aware logic lives in `@model_validator(mode="before")` methods on the row models — see `cascade` on `CompanyRevenueRowV2P1` in `packages/parser/src/parser/domain/schemas/v2p1.py` and the shared helper `cascade_metadata_row_na` in `packages/parser/src/parser/domain/schemas/validation_helpers.py`. The "Not available" auto-fill is `MapToNotAvailableRule` in `packages/cleaner/src/cleaner/rules.py`, gated on `f.code == ParserCode.BLANK_CELL` — it never matches `BLANK_CELL_DEPENDENT` or `BLANK_CELL_BLOCKING`.
 
 ### Which rows reach the database from an API extract upload?
 <!-- scenario: trust-the-data; topic: data-quality-policy -->
