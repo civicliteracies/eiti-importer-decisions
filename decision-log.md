@@ -275,7 +275,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** The convention matches the literal phrasing on the EITI template, so the value the submitter typed is the value the tool uses with no inversion step in between. If the tool flipped the rate silently, a stray typo in either direction would be invisible to the submitter checking the dashboard against their file.
 
-**Technical detail:** The v2.0 and v2.1 schemas in `packages/parser/src/parser/domain/schemas/v2p0.py` and `packages/parser/src/parser/domain/schemas/v2p1.py` map the header `("Exchange rate used: 1 USD =", 2)` to the field `exchange_rate_used`. The conversion direction is implemented once in `_convert_row` in `apps/cli/src/cli/stats.py` and mirrored in `convertRow` in `apps/web_ui/stats.js`: a local-currency row produces `val / exchange_rate` for the USD side, a USD row produces `val * exchange_rate` for the local side.
+**Technical detail:** The v2.0 and v2.1 schemas in `packages/parser/src/parser/domain/schemas/v2p0.py` and `packages/parser/src/parser/domain/schemas/v2p1.py` map the header `("Exchange rate used: 1 USD =", 2)` to the field `exchange_rate_used`. The conversion direction is implemented once in `convert()` in `packages/shared/src/shared/currency_conversion.py` and hand-mirrored in `convertRow` in `apps/web_ui/stats.js`: a local-currency row produces `val / exchange_rate` for the USD side, a USD row produces `val * exchange_rate` for the local side. The clean-SQL CASE WHEN in `packages/shared/src/shared/families/_sdf_clean_sql.py` encodes the same arithmetic at materialisation time.
 
 ### What happens when the exchange rate is zero?
 <!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
@@ -286,7 +286,18 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** A literal zero is never a meaningful exchange rate — no currency has ever traded at zero against the dollar — so the only situations producing it are a submitter who typed nothing, a template default that leaked through, or a parsing edge case. Treating it as missing produces the same visible behaviour as if the cell had been left blank, which is what the data actually means.
 
-**Technical detail:** In `compute_stats` in `apps/cli/src/cli/stats.py`, the guard is `if rate_float > 0.0 and math.isfinite(rate_float)` before assigning `exchange_rate`. The JS side enforces the same gate via `if (rateFloat > 0)` in `apps/web_ui/stats.js`. Because `exchange_rate` stays `None`, the v1 fallback block immediately below runs unchanged for v1 submissions.
+**Technical detail:** `sanitize_rate` in `packages/shared/src/shared/currency_conversion.py` rejects zero, non-finite, and non-positive values at the data-ingestion seam; both engines call it on the About-sheet rate before assigning `exchange_rate`. Because `exchange_rate` stays `None`, the v1 fallback block immediately below runs unchanged for v1 submissions.
+
+### How does the tool sanitize the exchange rate?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+
+**Situation:** The exchange-rate cell can carry zero, infinity, NaN, or a negative number — values that look numeric but are not a meaningful FX rate.
+
+**Decision:** A single `sanitize_rate` function at the data-ingestion seam (`shared.currency_conversion.sanitize_rate`) rejects 0, non-finite (±Inf, NaN), and non-positive values; it returns `SanitizedRate | None` so the type system propagates the absence of a rate from there forward. The parser's Pydantic schemas wrap the rate field with a `BeforeValidator` calling the sanitizer, and the stats engines call it on the About-sheet cell + the v1 archive entry before passing to the universal rule. Downstream consumers therefore see only positive finite rates or None.
+
+**Rationale:** Without the sanitisation, an infinite rate divides every revenue figure down to 0 and a NaN rate spreads NaN through every total — both outcomes look like real dashboard output but are wrong by orders of magnitude. Centralising the check on a NewType (`SanitizedRate`) and consuming it everywhere prevents per-call-site re-implementations from drifting.
+
+**Technical detail:** `sanitize_rate` lives at `packages/shared/src/shared/currency_conversion.py`. The Pydantic seam is `sanitize_rate_cell` in `packages/parser/src/parser/domain/schemas/validation_helpers.py`, used as `Annotated[SanitizedRate | None, BeforeValidator(sanitize_rate_cell)]` on `v1.exchange_rate`, `v2p0.exchange_rate_used`, and `v2p1.exchange_rate_used`. The JS engine mirrors the same predicate in `sanitizeRate` in `apps/web_ui/stats.js`.
 
 ### How are nonsensical exchange rates handled?
 <!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
@@ -297,7 +308,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** Without this check, an infinite rate divides every revenue figure down to 0, and a NaN rate spreads NaN through every total. Both outcomes look like real numeric output on the dashboard but are wrong by orders of magnitude. Catching them once at the boundary is cheaper than auditing every arithmetic step downstream.
 
-**Technical detail:** In `apps/cli/src/cli/stats.py`, the guard is `rate_float > 0.0 and math.isfinite(rate_float)`. In `apps/web_ui/stats.js`, `safeFloat` uses `isFinite(n)` so that `parseFloat("1e309")` (which returns `Infinity`) and `parseFloat("nan")` (which returns `NaN`) both come back as `0.0` and are then rejected by the same `rateFloat > 0` check.
+**Technical detail:** `sanitize_rate` in `packages/shared/src/shared/currency_conversion.py` and its JS sibling `sanitizeRate` in `apps/web_ui/stats.js` apply the same predicate: reject if the value is `None`/`null`, not finite (`+Inf`, `-Inf`, `NaN`), or non-positive. The parser schemas wrap the rate field with `BeforeValidator(sanitize_rate_cell)` so unsanitised rates cannot even land on a parsed row; the stats engines call the function on About-sheet and v1-archive rates before any consumer uses them.
 
 ### In what currencies are totals displayed?
 <!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
@@ -310,27 +321,38 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Technical detail:** The dual totals live in the `ReportStats` dataclass in `apps/cli/src/cli/stats.py` as `total_gov_revenue_local`/`_usd`, `total_company_payments_local`/`_usd`, and `reconciliation_gap_local`/`_usd`. The dashboard rendering rule lives in `renderFinancialValue` in `apps/web_ui/components/dashboard.js`: it renders USD primary plus a local secondary line when `mainCurrency !== 'USD' && mainCurrency !== 'Unknown'`, falls back to local-only when USD is null but local is computable, and emits an N/A card with a contextual notice when neither is available.
 
-### What happens to a total if one row cannot be converted?
+### What happens to a total if some rows cannot be converted?
 <!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** A v2.x company payments table contains one row in EUR alongside thirty rows in the reporting currency. The tool only has the USD-to-local rate from the About sheet, so it cannot convert that one EUR row.
 
-**Decision:** The local-side total and the USD-side total are tracked separately. As soon as any single row's local value cannot be computed the entire local total for that table becomes N/A; the USD total is treated the same way independently. The reconciliation gap inherits this: if either the government or company total is N/A on a side, the gap on that side is N/A too.
+**Decision:** Per-side totals are partial-aggregate: each total sums the rows the universal USD-conversion rule could resolve on that side, and the dashboard renders an annotation badge ("Partial: N rows unresolvable") so the reviewer sees the gap honestly. The total itself is only N/A when the entire source table is missing or empty — never because individual rows could not convert. Per-row unresolvable reasons (third_currency, rate_missing, value_missing, currency_missing) land on `clean_currency_resolution` after import for operator triage.
 
-**Rationale:** A partial sum that silently dropped the EUR row would understate the true figure with no visible warning, and a reviewer comparing the dashboard against the source file would see two numbers that should match but don't. Returning N/A surfaces the gap honestly — the reviewer sees that the table contains a currency the file cannot resolve and can decide whether to fix the source or accept the loss of comparability.
+**Rationale:** The earlier all-or-nothing rule turned a table with one EUR row into a single dashboard "N/A" with no indication of scale: reviewers could not tell whether twenty-nine of thirty rows reconciled or none of them did. Partial sums plus a per-side row count surface the gap with proportion: the reviewer sees the recoverable total and the count of rows it could not include, decides whether the gap is small enough to accept or worth fixing at the source, and uses the audit table to drill in.
 
-**Technical detail:** In `_sum_gov_revenues` and `_sum_company_payments` (both in `apps/cli/src/cli/stats.py`), each row that returns `(None, _)` from `_convert_row` sets `local_failed = True`; each row that returns `(_, None)` sets `usd_failed = True`. After the loop, `local_total` is replaced with `None` if `local_failed` is set, and the same for `usd_total`. The gov breakdown by sector shares the local convertibility constraint and is nulled together with `local_total`.
+**Technical detail:** `_sum_gov_revenues` / `_sum_company_payments` in `apps/cli/src/cli/stats.py` and `sumGovRevenues` / `sumCompanyPayments` in `apps/web_ui/stats.js` call `shared.currency_conversion.convert` (Python) or its hand-mirrored JS sibling, sum the rows that returned a non-None side, and count the rows that did not into `unresolvable_*_local_count` / `unresolvable_*_usd_count`. The dashboard's `renderPartialBadge` in `apps/web_ui/components/dashboard.js` emits the `card-notice` "Partial: N rows unresolvable" when the USD-side count is positive. Post-import, the clean-SQL `build_currency_resolution_sql` builder writes one `clean_currency_resolution` row per NULL-USD clean row carrying the matching `UnresolvableReason` value.
 
 ### Why might a row be uncomputable?
 <!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
 **Situation:** A v2.x revenue row has a per-row currency column. The file's About sheet declares one exchange rate, which links the reporting currency and USD. The row's currency might not be either of those two.
 
-**Decision:** A row whose currency is the reporting currency, blank, or missing is treated as already in the reporting currency and is convertible both ways. A row tagged USD in a non-USD-reporting file is also convertible — the rate covers that pair. A row in any third currency — for example, an EUR-denominated payment in a file reporting AMD with a USD/AMD rate — is marked uncomputable on both sides.
+**Decision:** Empty per-row currency cells canonicalise to the declaration's reporting currency before the universal USD rule fires; the clean-SQL `COALESCE(NULLIF(TRIM(...), ''), sdf.reporting_currency)` expression performs the substitution at materialisation. A row tagged USD in a non-USD-reporting file resolves USD-side as-is (the rate is irrelevant) and resolves local-side if the rate is present. A row whose canonical currency equals the reporting currency resolves both sides when the rate is present. A row in any third currency — for example, an EUR-denominated payment in a file reporting AMD with a USD/AMD rate — is marked unresolvable on both sides and records `UnresolvableReason.THIRD_CURRENCY` in `clean_currency_resolution`.
 
-**Rationale:** Converting a third currency requires a second exchange rate (EUR-USD or EUR-AMD) that the file does not provide. The tool refuses to invent one or pull from a live rates feed because the EITI methodology is that the file declares its own conversion basis. Recording the row as uncomputable lets the totals turn to N/A rather than silently mixing currencies.
+**Rationale:** Converting a third currency requires a second exchange rate (EUR-USD or EUR-AMD) that the file does not provide. The tool refuses to invent one or pull from a live rates feed because the EITI methodology is that the file declares its own conversion basis. Recording the row as unresolvable with a typed reason lets the dashboard show a partial total + count and the audit table drill operators into "which rows, and why".
 
-**Technical detail:** The branching lives in `_convert_row` in `apps/cli/src/cli/stats.py` and `convertRow` in `apps/web_ui/stats.js`. The first branch handles "local row" (row currency missing, empty, equal to reporting currency, or reporting currency itself unknown). The second branch handles `row_currency == "USD"` in a non-USD file. Anything that falls through returns `(None, None)`, which propagates the failure flag in the caller.
+**Technical detail:** The rule itself lives in `shared.currency_conversion.convert` (Python — the canonical source) and is hand-mirrored as `convertRow` in `apps/web_ui/stats.js`. The clean-SQL CASE WHEN in `shared/families/_sdf_clean_sql.py` encodes the same six cases. The contract test in `tests/unit/test_stats_contract.py` + `tests/js/contract.test.js` pins parity across all three implementations against a locked fixture; the in-memory SQLite tests in `tests/unit/test_sdf_clean_sql_usd.py` lock the clean-SQL encoding row-for-row.
+
+### When the per-row currency column is empty, what does the tool do?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+
+**Situation:** The v2.x revenue tables include a per-row currency column. In real EITI files the column is regularly empty on rows the operator considers implied by the About sheet — the same way a spreadsheet leaves a sticky header blank when the next row repeats the previous value.
+
+**Decision:** Empty per-row currency cells are canonicalised to the declaration's reporting currency before the universal rule fires. The clean-SQL projection writes the canonical currency to `clean_*.currency_code` and the rule consults the canonical value when computing the USD column. A row whose canonical currency lands NULL (because both the source cell and the About-sheet reporting currency are empty) records `UnresolvableReason.CURRENCY_MISSING` in `clean_currency_resolution`.
+
+**Rationale:** Treating an empty cell as "third currency that cannot be resolved" would produce avoidable third_currency unresolvables on the great majority of well-formed files. The implicit-reporting-currency convention is how submitters and EITI reviewers already read these tables; encoding it once at the clean tier means every downstream consumer (views, stats engines, dashboards, API) sees the canonical value without re-implementing the convention.
+
+**Technical detail:** The canonicalisation expression is `COALESCE(NULLIF(TRIM(l.{currency_col}), ''), sdf.reporting_currency)` — a single expression reused by `_canonical_currency_expr` in `shared/families/_sdf_clean_sql.py` for both the projected `currency_code` column and the USD CASE WHEN. The stats engines call `_canonical_row_currency` (Python) / `canonicalRowCurrency` (JS) before invoking the universal rule so the pre-import preview matches what materialisation will write.
 
 ### What happens when the reporting currency is USD?
 <!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
@@ -341,7 +363,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** Conversion is unnecessary in this case. Showing "USD 100,000,000" and immediately below it "USD 100,000,000" gives the reader no extra information and looks like a rendering bug.
 
-**Technical detail:** In `_convert_row` in `apps/cli/src/cli/stats.py`, the local-row branch checks `if reporting_currency == "USD"` and returns `(val, val)` directly. The exchange-rate field is not consulted on that path — a USD-reporting file with no rate produces normal totals, not N/A. The dashboard suppression is `const isLocalDifferent = stats.mainCurrency !== 'USD' && stats.mainCurrency !== 'Unknown'` in `apps/web_ui/components/dashboard.js`; when this is false, the `card-secondary` line is omitted.
+**Technical detail:** In `convert()` in `packages/shared/src/shared/currency_conversion.py`, the `row_currency == "USD"` and `row_currency == reporting_currency` branches both special-case `reporting_currency == "USD"` and return `ConversionResult(value, value, None)` — same value on both sides, no rate consulted. A USD-reporting file with no rate therefore produces normal totals, not N/A. The dashboard suppression is `const isLocalDifferent = stats.mainCurrency !== 'USD' && stats.mainCurrency !== 'Unknown'` in `apps/web_ui/components/dashboard.js`; when this is false, the `card-secondary` line is omitted.
 
 ### How is the reconciliation gap computed?
 <!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
@@ -353,6 +375,8 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 **Rationale:** Subtracting in this direction matches the EITI reconciliation methodology, which uses the government-side figure as the reference and asks "how much of what the government said it received are companies confirming?". The percentage is more useful than the absolute gap for cross-country comparison because it cancels out the scale difference between, say, Nigeria's oil revenues and Chad's mining revenues.
 
 **Technical detail:** In `apps/cli/src/cli/stats.py`, the gap is computed at the end of `compute_stats` only when both sides on a given currency pair are non-None: `stats.reconciliation_gap_local = stats.total_gov_revenue_local - stats.total_company_payments_local` and likewise for USD. The percentage path also guards against `base != 0.0` — a country reporting literally zero government revenue would otherwise trigger ZeroDivisionError, and a bare-truthy check would have silently dropped the percentage in that case. The same logic lives in `computeStats` in `apps/web_ui/stats.js`.
+
+**Note on partial-aggregate asymmetry:** Under the partial-aggregate semantics, each side's total is a sum of the rows the universal USD rule could resolve on that side; rows it could not resolve are counted into `unresolvable_*_count`. The gap can therefore compare row populations that aren't identical — one side may have excluded 5 third-currency rows the other side fully resolved. The tool does NOT null the gap when either side has unresolvable rows; the partial gap is shown alongside the per-side badge counts so the operator sees both the figure and the proportion it covers. Nulling the gap whenever either side was partial would reintroduce the all-or-nothing behaviour the partial-aggregate refactor (BUG-029) was designed to remove — an unresolvable EUR row in a 30-row company-payments table would hide the gap for the other 29 rows on both sides. The badge counts (`unresolvable_gov_*_count`, `unresolvable_comp_*_count`) on `ReportStats` carry the missing context.
 
 ### Which currency is used for the reconciliation gap percentage?
 <!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
@@ -385,7 +409,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** With no per-row currency column there is no way to detect a mixed-currency v1 file, and in practice these files predate the multinational-USD-payment situation that motivated the per-row column. Treating every row as reporting-currency mirrors how the submitter implicitly thought about the file when they filled it in.
 
-**Technical detail:** In `packages/shared/src/shared/stats_config.json`, `currency_field.summary_v1` is `{"gov": null, "comp": null}`. The stats engine reads those nulls into `gov_currency_field` and `comp_currency_field` and so never tries to look up a per-row currency on a v1 row — `row_currency` stays `None`, which routes the row through the "local row" branch of `_convert_row`. The currency-mismatch crosscheck in `packages/crosschecker/src/crosschecker/crosschecker_service.py` skips v1 entirely on the same signal.
+**Technical detail:** In the `STATS_REGISTRY` entry for `summary_v1`, `StatsCurrency.gov_per_row` and `StatsCurrency.comp_per_row` are both `None`. The stats engines read those nulls into `gov_currency_field` and `comp_currency_field` and so never try to look up a per-row currency on a v1 row; `_canonical_row_currency` then canonicalises the absent cell to the reporting currency, and `convert()` routes the row through its `row_currency == reporting_currency` branch. The currency-quality crosscheck in `packages/shared/src/shared/families/sdf.py` skips v1 entirely on the same signal (via its `has_row_currencies` guard).
 
 ### Where does the tool get exchange rates for old v1 files?
 <!-- scenario: compare-across-versions; topic: currency-financial-calculations -->
@@ -396,7 +420,9 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** Historical exchange rates are stable and available from EITI's own data. A static, committed table avoids runtime dependency on external services and guarantees that the dashboard and the server can't drift apart.
 
-**Technical detail:** Lookup file `v1_exchange_rates.json`, keyed by `{iso3}_{year}`. `compute_stats` resolves the rate using `country_iso3` + `end_date` year. The same JSON is served to the browser via the `/stats-config` endpoint, so Python and JS share one source.
+**Technical detail:** Lookup file `v1_exchange_rates.json`, keyed by `{iso3}_{year}`. `compute_stats` resolves the rate using `country_iso3` + `end_date` year. The same JSON is served to the browser via the `/stats-config` endpoint, so Python and JS share one source. The SDF mapper consults the same archive at import time (`packages/shared/src/shared/families/sdf.py::build_sdf_metadata_findings`), so the rate that ends up in `metadata_summary_data_files.exchange_rate_used` is the same value the pre-import preview displayed.
+
+**Note on re-import behaviour:** The archive is committed to the repo and treated as static for any given release. If the archive is edited (a corrected rate for a previously-covered country-year) and a v1 declaration that was previously imported is then re-imported, the mapper writes the new rate to `metadata_summary_data_files.exchange_rate_used` and the clean SQL recomputes every USD value for that declaration on the new rate. No operator-visible finding fires to call out the change — the import report records a new event but does not compare the new rate against any previous value. Operators who re-import a v1 declaration after an archive edit should expect USD totals to move; if a numeric reconciliation depends on the old rate, capture the dashboard before the re-import.
 
 ### Which currency does the v1 dashboard prioritize?
 <!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
@@ -873,7 +899,7 @@ Rows whose currency cell is blank or carries a sentinel ("Not applicable", "Not 
 
 **Rationale:** Downstream aggregations sum on the per-row currency, not on the About declaration. A fully-mismatched About is metadata drift the operator should see in review but doesn't change what the database stores. Blocking on the contradiction broke files where the operator's About declaration was stale but the per-row data was correct — the gate forced a source-side edit that didn't actually change any imported value. The earlier per-row mismatch rule produced thousands of warnings across the v2 corpus, dominated by legitimate multinational USD payments on local-currency-reporting files; the aggregate predicate still surfaces the two distinct shapes (every-row vs most-but-not-all) so reviewers can act on them, just without import-time enforcement.
 
-**Technical detail:** `_make_currency_consistency_check` and `_evaluate_currency_dominance` in `packages/shared/src/shared/families/sdf.py` produce two finding codes. Both `CURRENCY_DECLARATION_MISMATCH` and `CURRENCY_MOSTLY_NON_REPORTING` land with `category=FindingCategory.CROSSCHECK` and never block. The contradiction finding lands on `(table_name="about", table_row_index=0, field_name="reporting_currency")` as the review anchor; the dominance finding lands on the affected revenue table. Thresholds live on two module-level constants — `_CURRENCY_CONTRADICTION_THRESHOLD = 1.0` and `_CURRENCY_DOMINANCE_THRESHOLD = 0.80`. Production-value currency (Part 3 Projects `currency` and v2.1 `cost_currency`) is intentionally out of scope — only revenue tables are checked.
+**Technical detail:** `_make_currency_quality_check` and `_evaluate_currency_dominance` in `packages/shared/src/shared/families/sdf.py` produce two finding codes. Both `CURRENCY_DECLARATION_MISMATCH` and `CURRENCY_MOSTLY_NON_REPORTING` land with `category=FindingCategory.CROSSCHECK` and never block. The contradiction finding lands on `(table_name="about", table_row_index=0, field_name="reporting_currency")` as the review anchor; the dominance finding lands on the affected revenue table. Thresholds live on two module-level constants — `_CURRENCY_CONTRADICTION_THRESHOLD = 1.0` and `_CURRENCY_DOMINANCE_THRESHOLD = 0.80`. Production-value currency (Part 3 Projects `currency` and v2.1 `cost_currency`) is intentionally out of scope — only revenue tables are checked.
 
 ### Which v2 fields auto-fill 'Not available' as a last-resort fallback?
 <!-- scenario: trust-the-data; topic: data-quality-policy -->
@@ -919,7 +945,7 @@ Rows whose currency cell is blank or carries a sentinel ("Not applicable", "Not 
 
 **Technical detail:** `_load_alias_resource` in `packages/enricher/src/enricher/alias_manifest_source.py` tracks `(entity_type, NFKC-normalized casefolded alias, country) → eiti_id` and raises `ValueError` on divergence. The normalization mirrors the matcher's normalize-keyed lookup, so the loader catches the same shape the matcher would silently mis-resolve. mtime-keyed memoization ensures a curator edit re-evaluates the check on the next `AliasManifestSource()` construction without requiring a restart.
 
-**Technical detail:** The blocking-vs-informational distinction is `category=FindingCategory.VALIDATION` vs `category=FindingCategory.CROSSCHECK` on `Finding` emission in `_make_currency_consistency_check`. Switching the 100% case from blocking to informational is a one-line change — flip the category on the emission site and rename the code accordingly. The change does not require updating the threshold constants, the dominance helper, or the test fixtures.
+**Technical detail:** The blocking-vs-informational distinction is `category=FindingCategory.VALIDATION` vs `category=FindingCategory.CROSSCHECK` on `Finding` emission in `_make_currency_quality_check`. Switching the 100% case from blocking to informational is a one-line change — flip the category on the emission site and rename the code accordingly. The change does not require updating the threshold constants, the dominance helper, or the test fixtures.
 
 ### What happens to currency checks if the reporting currency is missing?
 <!-- scenario: reconcile-government-vs-companies; topic: consistency-rules -->
@@ -930,7 +956,7 @@ Rows whose currency cell is blank or carries a sentinel ("Not applicable", "Not 
 
 **Rationale:** Without a reference currency on the About sheet, there is nothing to compare each row against. The single warning tells the reviewer exactly which field needs to be filled in the source file. In practice this rarely fires — the parser typings require a valid `reporting_currency` value on the About row, so a blank cell surfaces as a parser-level validation error before the crosschecker runs. The crosscheck finding is the safety net for any path that bypasses the parser-level check.
 
-**Technical detail:** The single finding code is `NO_REPORTING_CURRENCY`, emitted by `_make_currency_consistency_check` in `packages/shared/src/shared/families/sdf.py` against the About table. The aggregate-tier predicate is guarded behind a presence check on the About-sheet currency value.
+**Technical detail:** The single finding code is `NO_REPORTING_CURRENCY`, emitted by `_make_currency_quality_check` in `packages/shared/src/shared/families/sdf.py` against the About table. The aggregate-tier predicate is guarded behind a presence check on the About-sheet currency value.
 
 ### Do consistency warnings block import?
 <!-- scenario: trust-the-data; topic: consistency-rules -->
@@ -1185,7 +1211,7 @@ There is no per-request bypass. Field defined in `packages/shared/src/shared/set
 
 **Rationale:** v1 files genuinely have only one currency per declaration. A per-row check would have nothing to compare against; running it would either produce noise or invent currencies that aren't in the file. Treating the About-sheet currency as the single source of truth matches how v1 reports actually compute their totals.
 
-**Technical detail:** In `packages/shared/src/shared/stats_config.json`, `currency_field.summary_v1` is `{"gov": null, "comp": null}` for both sides. The currency-consistency closure built by `_make_currency_consistency_check` in `packages/shared/src/shared/families/sdf.py` short-circuits via its `has_row_currencies` guard when both fields are null. The v1 totals spec omits `group_by`, producing a scalar comparison.
+**Technical detail:** In `packages/shared/src/shared/stats_config.json`, `currency_field.summary_v1` is `{"gov": null, "comp": null}` for both sides. The currency-quality closure built by `_make_currency_quality_check` in `packages/shared/src/shared/families/sdf.py` short-circuits via its `has_row_currencies` guard when both fields are null. The v1 totals spec omits `group_by`, producing a scalar comparison.
 
 ### How is the v1 revenue sheet shaped compared to v2?
 <!-- scenario: compare-across-versions; topic: version-differences -->
