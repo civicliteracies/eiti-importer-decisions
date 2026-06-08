@@ -848,6 +848,17 @@ On a tablet in portrait (between about 480 and 768 pixels), the Files pane stays
 
 **Technical detail:** Both submission types compute the declaration's unique identifier with the same formula: `uuid5(DECLARATION_NAMESPACE, f"{iso3}:{year}")`. The Summary Data Template schema reads `iso3` directly from the About sheet. The API extract schema reads `iso2` from the row data and translates it to `iso3` through a static map (`iso2_to_iso3` in `packages/parser/src/parser/domain/country_resolver.py`) before passing it to the same formula — so the resulting UUID matches. Country codes the map cannot resolve (Kosovo's `XK`, deprecated codes) are dropped at extraction time and logged via the `api_extract_cohorts_dropped` event.
 
+### Government entities and projects are deduplicated by the pipeline
+<!-- scenario: trust-the-data; topic: entity-resolution -->
+
+**Situation:** When an EITI report names a company, a government agency, or a project, the tool consults an alias manifest to assign each reference a stable identifier. All three entity types in the manifest come from the dedup pipeline — Splink probabilistic clustering, GLEIF cross-check where applicable, and operator-reviewed cluster verdicts.
+
+**Decision:** A reconciliation step compares the EITI staff's hand-curated alias list against the pipeline's clustering. Curator entries whose name appears in the pipeline's clustering (above a similarity threshold and with matching country) inherit the pipeline's identifier so future references resolve consistently. Curator entries that don't match a pipeline cluster appear in a per-pipeline-run review queue — an operator confirms them, drops them, or adds them as a manual override.
+
+**Rationale:** Three benefits drive this shape. Government agencies and projects get the same precision discipline as companies (Splink scoring, GLEIF cross-check for agencies, cluster review). When a new EITI report introduces a previously-unseen agency or project, the pipeline clusters it with existing references — a frozen hand-list could only describe what it had been taught about. The entity identifier is deterministic across pipeline runs (the same cluster always produces the same identifier), so downstream consumers see stable values.
+
+**Technical detail:** Identifiers are `eiti_<type>_<uuid5>` where the uuid5 hashes the cluster's member set under a fixed namespace — same cluster, same id. The reconciliation script is `tools/dedup/scripts/reconcile_curator_entries.py`; it uses `enricher.dedup_norm.normalize_entity_name` + `rapidfuzz.fuzz.ratio` at threshold 90.0 (the same value rule 28 uses for name-similarity decisions) and writes orphan entries to `<pipeline_run_dir>/curator-reconciliation-queue.csv` with `source=curator_disagreement`. The CSV reflects the current run's orphans only — re-running the script against the same run_dir replaces the file (matching the markdown report's regenerate-each-run semantic). Matching requires both name similarity above the threshold AND country agreement: a curator entry tagged for a specific country (for example, country='NO') only matches a pipeline cluster whose canonical country is the same; pipeline clusters with no country evidence don't match country-tagged curator entries. Methodology and per-entity-type calibration tables live in `docs/guides/dedup-pipeline.md` §9.7 and §11.
+
 ---
 
 ## 6. Consistency Rules
