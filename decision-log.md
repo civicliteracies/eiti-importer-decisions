@@ -1084,6 +1084,19 @@ When the country sub-slot cannot resolve (e.g. `"Denver, CO USA"`, `"Bogor, Atla
 
 ## 7. Import Behavior
 
+### How does the tool decide whether a cohort's country was an active EITI member?
+<!-- scenario: submit-a-report; topic: import-behavior -->
+
+**Situation.** Each cohort in a submitted file is anchored to a country and a year. The tool maintains an authoritative record of which countries have implemented the EITI Standard and when. Cohorts whose country was not an active EITI member at the end of the cohort year cannot be imported.
+
+**Decision.** When the operator submits a file, the tool checks each cohort's country against the membership record for the cohort year. Cohorts whose country was not an active member at that date are marked Ineligible and cannot be selected for import. If every cohort in the file is ineligible, the file is rejected at upload and the operator sees its rejection detail by clicking the file's row in the files pane — the row expands in place. When the rejected file is one member of a larger batch whose other files reached the review stage, the workspace header carries a central "Send feedback" button that opens a flag modal with a file-selector, letting the operator pick the rejected file and flag the rejection for the development team.
+
+**Rationale.** The tool's purpose is to import data from active EITI members; importing data for a country that was withdrawn or suspended at the cohort year would store data that doesn't belong in the EITI database. The "country not in catalog" case is treated the same as suspended/withdrawn — fail-closed protects database integrity.
+
+Partial identity for terminal-with-identification sessions is informative, not misleading: when a file is rejected at the membership gate (or as a DUPLICATE_SUBMISSION) the cached pipeline context retains the identified submission type. The flag-modal escalation path renders "Identified as Summary v2.1" alongside the rejection reason so the development team sees what the tool understood about the file before refusing it. The terminal status itself is unambiguous at the file-pane and dashboard layer.
+
+**Technical detail.** The membership catalog ships with the tool as a curated list of 88 status events across 63 countries (joined / suspended / withdrawn / delisted), sourced from per-country status banners on `eiti.org/countries/<name>` and published EITI Board decisions. Validation Data Query (VDQ) imports refine the catalog over time. The gate fires once during identification (`DetectorService._classify_cohorts`) when the family opts in via `CohortContract.membership_gate_inputs`; SDF and API_EXTRACT_V1 opt in, VDQ (the catalog's authoritative source) and Company Assessment (no country dimension) both bypass. Per-cohort `COHORT_INELIGIBLE` or `COHORT_INELIGIBLE_NO_RECORD` findings carry a typed `classification_detail` discriminated-union payload (`status_at_reference`, `status_change_date`, `reference_date`, `country_iso3`, `reason`) so the picker can render rich rejection detail without re-deriving from the message string. The selection-confirmation endpoint enforces the same gate server-side: a `POST /sessions/{id}/selection-confirmation` that names an ineligible cohort returns `422 RejectionResponse(kind="ineligible_cohorts", rejected_cohorts=[...])`. The end-of-year reference date is the conservative test (a cohort spanning a status change uses the most recent applicable status at the cohort's last day).
+
 ### What happens if the user re-imports a declaration?
 <!-- scenario: submit-a-report; topic: import-behavior -->
 
