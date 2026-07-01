@@ -1293,6 +1293,23 @@ There is no per-request bypass. Field defined in `packages/shared/src/shared/set
 
 **Technical detail:** At `POST /sessions/confirm`, after the per-session committed-import check, the endpoint calls `EventManager.find_active_sessions_by_hash` to find every other session whose `UPLOADED` event carries the same SHA-256 and whose latest state is not in `DEDUP_INACTIVE_STATES` (terminal + IMPORTED + EXPIRED + SUBMISSION_DELETED + STALE). If any are found, the 409 body's `conflicts[]` entry for that session has `kind: "inflight_sibling"` and carries `sibling_session_ids`, `sibling_batch_ids`, and a `release_actions` list — one entry per sibling session, plus one per sibling batch. Every entry points at `POST /sessions/kill` with a ready-to-submit `body` (either `{session_ids: [<sid>]}` or `{session_ids: [<every member of the batch>]}`). The caller picks an entry and POSTs the carried body as-is. Sibling lookup in `EventManager.find_active_sessions_by_hash` at `packages/shared/src/shared/session/event_manager.py`. Response shape assembled in `confirm_sessions` at `apps/api/src/api/session_endpoints.py`. The kill endpoint writes a `CANCELLED` event and deletes the cached `PipelineContext` for every listed non-terminal session, which releases the hash slot immediately. The CLI surfaces the choice via a `questionary` prompt.
 
+### Which of the Lists sheet reference vocabularies exist as tables in the database?
+<!-- scenario: cross-cutting; topic: import-behavior -->
+
+**Situation:** The SDF template's `Lists` sheet defines many controlled vocabularies — country codes, currencies, commodities, GFS codes, sectors, project phases, government entity types, "simple options" (Yes/Partially/No/Not applicable), "reporting options" (systematically-disclosed / EITI-reporting / Not applicable / Not available). The parser needs to know all of them to validate cell values. But not all of them warrant a metadata table in the database.
+
+**Decision:** A Lists vocabulary belongs in the database as a metadata table only when it provides **filtering affordance** — i.e., when analytical queries want to group / filter / aggregate by that vocabulary's values, or when downstream tables need to join against it for labels or metadata. Enforcement of vocabulary membership is *not* a reason to create a DB table: the parser's StrEnum already enforces valid values at ingest.
+
+Applied to the Lists sheet vocabularies:
+- **Filter-worthy → keep as DB table**: countries, currencies, commodities, GFS codes, sectors, project phases, government entity types. Downstream analytics filters/joins on these values.
+- **Not filter-worthy → StrEnum only in code**: "simple options" (Yes/Partially/No/Not applicable) — a Yes/No response is a *value*, not a partition anyone filters on; "reporting options" (systematically-disclosed vs EITI-reporting) — no natural analytical query filters reports by disclosure mechanism.
+
+The consequence is that `metadata_options_simple` and `metadata_options_reporting_status` are removed from the schema (they never provided filtering value and the enum-in-code layer already enforces membership). `ResponseOption` and `ReportingOption` remain as StrEnums in `shared/sdf_vocabulary.py`.
+
+**Rationale:** Adding a metadata table has real costs — schema surface area, DBML upkeep, seed maintenance, contract-test complexity. A table that nobody joins against or filters by pays those costs without repaying them. The old heuristic "the vocabulary should have a DB table if a FK points at it" is circular: adding an FK is itself a design choice. The filtering-affordance criterion is the actual load-bearing question.
+
+**Technical detail:** The mapping between vocabulary and StrEnum is in `packages/shared/src/shared/sdf_vocabulary.py` (ResponseOption, ReportingOption, ProjectPhase, CompanyType, and others). Metadata tables for filter-worthy vocabularies live in `packages/shared/src/shared/db_models.py` and are seeded via `seed_authoritative_catalog(con, MetadataX, rows)` at DB init (see `packages/shared/src/shared/session/target_db_engine.py`). If a future analysis surfaces a real filtering need for a currently-enum-only vocabulary, the migration is: add the DB model, seed it, and add the FK column to the consuming clean_* table.
+
 ### Where does the website read from — the clean tables, the metadata tables, or something else?
 <!-- scenario: cross-cutting; topic: import-behavior -->
 
