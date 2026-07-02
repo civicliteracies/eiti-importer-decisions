@@ -365,6 +365,17 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Technical detail:** The canonicalisation expression is `COALESCE(NULLIF(TRIM(l.{currency_col}), ''), sdf.reporting_currency)` — a single expression reused by `_canonical_currency_expr` in `shared/families/_sdf_clean_sql.py` for both the projected `currency_code` column and the USD CASE WHEN. The stats engines call `_canonical_row_currency` (Python) / `canonicalRowCurrency` (JS) before invoking the universal rule so the pre-import preview matches what materialisation will write.
 
+### When the EITI API archive omits a currency the export itself declares, what does the tool do?
+<!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
+
+**Situation:** The EITI API revenue export denominates every revenue value in US dollars, and its currency column says "USD" on every filled row of every country. For one country-year — Liberia 2019 — the export left the currency column blank on all 437 rows while still recording, in a neighbouring column, that Liberia reported in USD. Without a currency, those rows cannot be included in dollar totals, and Liberia 2019 disappears from the charts.
+
+**Decision:** When a row from the EITI API export has a blank currency, the tool fills it with USD while reading the file, and records one finding per filled cell (naming the sheet row) so every repair is visible in the report's findings list. Values the source supplied are never changed — only blank cells are filled.
+
+**Rationale:** The export's own data makes the answer certain: every filled currency cell in the entire export is USD, the blank rows carry the export's "reported in USD" marker, and the dollar figures match EITI's published conversions. Filling the blanks restores data the source clearly intended, and the per-cell findings keep the repair auditable rather than silent.
+
+**Technical detail:** The fill is a parser transform (`packages/parser/src/parser/transforms/api_extract_currency_fill.py`) registered only for the `api_extract_v1` submission, running before row validation so the "Not available" placeholder never forms. It targets the two revenue tables (`agency_revenues_api_v1`, `company_revenues_api_v1`); each fill emits a `SCHEMA_DEVIATION` finding with the dedicated parser code. Downstream, the standard USD-conversion rule treats the filled rows as USD-native.
+
 ### What happens when the reporting currency is USD?
 <!-- scenario: reconcile-government-vs-companies; topic: currency-financial-calculations -->
 
