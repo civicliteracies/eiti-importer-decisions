@@ -34,6 +34,19 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 ---
 
+### Are the two contract-disclosure questions the EITI equivalences file under a second Requirement a source error?
+<!-- scenario: trust-the-data; topic: pending-decisions -->
+
+**Situation:** The EITI indicator equivalences file two contract-disclosure questions under two different EITI Requirements within the same Standard generation. "Are contracts disclosed?" appears under Requirement 3.12 (Contracts), where it belongs, and Requirement 3.11 (Beneficial ownership), where a contract-disclosure question does not fit. "Does the report address the government's policy on contract disclosure?" appears under Requirement 3.12 and Requirement 3.10 (Licence allocations). Because one question maps to two unrelated concepts, the tool cannot tell which a file means, so a real answer ("Are contracts disclosed? — Yes") is left unresolved rather than attached to a guess.
+
+**Question:** Are the second placements (Requirements 3.11 and 3.10) deliberate, or errors in the equivalences source? EITI has not confirmed.
+
+**Status quo:** The tool treats the beneficial-ownership and licence-allocation placements as source errors and files both questions under Contracts (Requirement 3.12), so a file's answer resolves instead of landing unresolved. This overrides the EITI equivalences and is the project's working assumption — reversed if EITI confirms the dual placements are intended.
+
+**Technical detail:** In `Indicatory Equivalences_not commodities.xlsx` the labels appear on the "Contracts" sheet (new-ids 27 and 26, Requirement 3.12) and, duplicated, under new-id 1785 (Requirement 3.11) and new-id 1784 (Requirement 3.10), all SDT Version 1. `WORKBOOK_CORRECTIONS` in `packages/shared/src/shared/eiti_indicators.py` drops new-ids 1784 and 1785 from the dictionary and from every alias targeting them, so each label carries a single concept and resolves to Requirement 3.12 instead of landing at `indicator_id = 0`. A same-concept-key collision detector (a guard test) flags any future such dual placement for human review rather than letting it silently drop.
+
+---
+
 ## 1. Data Quality Policy
 
 ### What kinds of errors can be fixed in the tool?
@@ -1579,3 +1592,15 @@ The consequence is that `metadata_options_simple` and `metadata_options_reportin
 **Rationale:** An empty checklist cell means the country did not report that item. Asking a human to confirm each blank adds no information and would block every import behind dozens of clicks.
 
 **Technical detail:** The Part 2 row models allow the Not-available sentinel on the answer column, so a blank classifies as the non-blocking `BLANK_CELL` finding and the cleaner proposes `NotAvailable.NV`; the auxiliary source/units columns use the `OptionalStrNVorNA` alias, whose blank-to-NV coercion is the established quiet path for cells where a missing value is expected. Rows whose label cell is blank but that carry content (answers or source links spilling onto the next row) inherit the previous row's label at parse time, with a `PART2_CONTINUATION_LABEL_INHERITED` finding recording each attribution.
+
+### An unrecognised Part 2 indicator or commodity blocks at review
+
+<!-- scenario: fix-problems-before-import; topic: import-behavior -->
+
+**Situation:** Part 2 lists a country's disclosure indicators (question labels) and its per-commodity production, export and in-kind rows (each carrying a Harmonised System commodity code). A file can carry a question label the indicator vocabulary doesn't hold, or a commodity whose HS code isn't catalogued.
+
+**Decision:** An unrecognised indicator label or commodity is a blocking item at review, not a silent import. An unrecognised indicator label surfaces with its section's known indicators offered as a pick-list — the operator maps it to one, or fixes the source; a known wording variant is resolved to its canonical form automatically and imports without interruption. An unrecognised commodity blocks with a fix-in-source problem and no suggestions, because its HS code is exact (there is no spelling to resolve). Only recognised indicators reach the database — a row the tool cannot recognise never lands as a row.
+
+**Rationale:** A 0 foreign key silently written to the public database is invisible data loss: an operator querying the data cannot tell a real indicator from an unrecognised one that collapsed to 0, and the gap surfaces only if someone thinks to look for zeros. Deciding recognition before the review gate — the same point at which an unknown Sector already blocks — turns that silent gap into a decision the operator makes with the file in front of them. The asymmetry that makes this safe: recognising a value against a closed vocabulary can fail and must be reviewable, but once a value is recognised the lookup to its database id cannot fail, so that half stays downstream.
+
+**Technical detail:** Recognition runs inside the row models' typed label fields (`DisclosureIndicatorLabel`, `Req3xCommodityLabel`, `V1SubItemLabel` — Pydantic validators on the Part 2 schemas), after the section stamp fills each row's `grouping_label`. Labels recognise against `packages/shared/src/shared/indicator_recognition.py` (section-scoped; a known wording variant resolves via the alias vocabulary and passes without a finding) and commodities against `packages/shared/src/shared/commodity_recognition.py` (HS-code-keyed). A miss raises `ParserCode.UNKNOWN_INDICATOR_LABEL` (carrying the section's canonical labels as `candidates`) or `ParserCode.UNKNOWN_COMMODITY` (source-only). With recognition upstream, the clean-tier alias JOIN in `build_indicator_values_sql` (`packages/shared/src/shared/families/_sdf_clean_sql.py`) is a total canonical→id lookup: a row resolving to no indicator is a non-indicator header dropped by an explicit `WHERE indicator_id IS NOT NULL`, never an `indicator_id=0` row.
