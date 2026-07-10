@@ -1504,6 +1504,40 @@ The consequence is that `metadata_options_simple` and `metadata_options_reportin
 
 ---
 
+### How does the tool handle a provably-wrong cell in one specific archived file?
+<!-- scenario: trust-the-data; topic: version-differences -->
+
+**Situation:** A handful of individual archived country files carry a single cell that is provably wrong in a way the general recovery techniques above cannot touch — a financial value at the wrong scale or magnitude (verified against the same country's other reporting years or market data), a number malformed by mixed thousand/decimal separators, or an administrative-metadata cell an operator filled with something that isn't the expected shape (a submitter email cell holding an organisation name). Widening a schema or a before-validator to accept the malformation would unblock the one file but make **every future upload** that lenient — a stray value in next year's submission would then import silently instead of surfacing for review.
+
+**Decision:** These are corrected per-declaration, keyed to the exact file (country + reporting year from the About sheet), applied at parse time before validation. The schemas and their before-validators stay strict: the same malformed shape in a future upload still blocks at validation and surfaces for review — only the named archived declaration is corrected. Each correction emits a `DECLARED_VALUE_CORRECTED` finding recording what changed and why, so the substitution is on the operator audit trail rather than silent.
+
+Current corrections:
+
+- **Nigeria 2018 crude value.** The source cell `50,486,312.534.10` mixes comma and dot thousand separators; reading the final separator as the decimal point yields `$50.486B`, which reconciles against the declaration's own crude volume (111.47M Sm3 o.e.) at ~$72/barrel-equivalent. (Nigeria 2017 has a separate scale correction to `$33.545B`.)
+- **Trinidad 2017 source/units cell.** Column F on the disclosure checklist holds the bare number `7.16` — a report-section reference the operator typed as a number. The schema expects text there (a reference, URL, or unit), so the cell is kept verbatim as the string `"7.16"`.
+- **Mozambique 2019 submitter email.** The submitter email cell holds `"EITI Mozambique"`, an organisation name, not an email address; there is no address to recover from the file. It is defaulted to the EITI International Secretariat contact (`contact@eiti.org`) so a full financial declaration is not blocked on unusable contact metadata. A future upload with a malformed submitter email still blocks — the default is scoped to this one archived declaration, not a general rule.
+
+**Rationale:** EITI's archive is a fixed historical corpus; refusing to import a whole declaration over one unrecoverable-by-rule cell would drop real public data. A per-declaration correction unblocks exactly that file with an audit trail, without teaching the tool to accept the malformation from anyone else. Scale, magnitude, and separator corrections change a reported financial figure, so each carries the verification that established the corrected value; the email default changes only contact metadata, never financial data, and substitutes a documented placeholder rather than inventing a country-specific address.
+
+**Technical detail:** `_CORRECTIONS` in `packages/parser/src/parser/transforms/declaration_value_corrections.py` — each entry names `(iso3, year, table_name, where-conditions, field, kind, value, rationale)`. `kind="absolute"` replaces with `value` (a number, or a string for a text cell); `kind="multiplier"` scales the existing numeric cell. The transform is registered on `_V2_TRANSFORMS` and matched after `derive_about_metadata_from_country` (whose About identity it keys on). `DECLARED_VALUE_CORRECTED` is in `_SCHEMA_DEVIATION_PARSER_CODES`, so it lands in the observation channel, not the per-cell review gate — the corrected cell then validates normally and the file is not blocked on it.
+
+---
+
+### What happens to an operator-added disclosure row that matches no Standard indicator in an archived file?
+<!-- scenario: trust-the-data; topic: version-differences -->
+
+**Situation:** The disclosure checklist recognises each row's indicator label against the EITI Standard vocabulary; an unrecognised label normally blocks at review (see *An unrecognised Part 2 indicator or commodity blocks at review*). A few archive files carry rows an operator added to a checklist section for a measure the Standard has no indicator for — a real, filled-in disclosure the vocabulary simply doesn't cover. With an operator present at review this is correct: they map it or move it. But an archive bulk-import has no operator at the gate, so one such row would block the whole declaration — all of its companies, revenues, and its *recognised* indicators — out of the database.
+
+**Decision:** For the specific archived declarations named in the transform, these rows are relocated to the free-form "Additional information" capture rather than blocking. The row's cells move there verbatim, keyed on their real spreadsheet coordinates, and drop out of the checklist so recognition doesn't block; downstream they survive as text in that section's aggregated content (not as structured, queryable indicator values). The rest of the declaration imports normally. Each relocation emits a `NON_STANDARD_ROW_RELOCATED_TO_ADDITIONAL_INFO` finding recording what moved and why.
+
+This is a preservation move, scoped exactly like the value corrections above: it keeps supplementary data that would otherwise be lost, without loosening recognition — a future upload's unrecognised label still blocks at review — and without minting canonical indicators for one operator's custom rows (which would pollute the vocabulary every country aggregates against). It is deliberately lower-fidelity than a real indicator: the figures are kept for reference, not for analysis, because these rows carry no slot the Standard can aggregate.
+
+**Worked case:** Senegal 2018 added two SOE↔government transfer questions (SOEs-to-government, 879,714,772 XOF, and government-to-SOEs, 0) to the Requirement 4.5 checklist. The canonical 4.5 indicator ("revenues received by SOEs") is filled separately and imports as data; the two transfer rows match no 4.5 indicator and are relocated to the government-revenues additional-info capture so the declaration imports whole.
+
+**Technical detail:** `_RELOCATIONS` in `packages/parser/src/parser/transforms/preserve_nonstandard_disclosure_rows.py` — each entry names `(iso3, year, source_table, dest_table, labels, column_map, section, rationale)`. Registered on `_V2_TRANSFORMS` alongside `apply_declaration_value_corrections`, both keyed on About identity via the shared `about_identity`. `NON_STANDARD_ROW_RELOCATED_TO_ADDITIONAL_INFO` is in `_SCHEMA_DEVIATION_PARSER_CODES` (observation channel, non-blocking).
+
+---
+
 ## Cross-Cutting
 
 ### How are numeric IDs from Excel handled?
@@ -1611,7 +1645,7 @@ The consequence is that `metadata_options_simple` and `metadata_options_reportin
 
 **Situation:** Part 2 lists a country's disclosure indicators (question labels) and its per-commodity production, export and in-kind rows (each carrying a Harmonised System commodity code). A file can carry a question label the indicator vocabulary doesn't hold, or a commodity whose HS code isn't catalogued.
 
-**Decision:** An unrecognised indicator label or commodity is a blocking item at review, not a silent import. An unrecognised indicator label surfaces with its section's known indicators offered as a pick-list — the operator maps it to one, or fixes the source; a known wording variant is resolved to its canonical form automatically and imports without interruption. An unrecognised commodity blocks with a fix-in-source problem and no suggestions, because its HS code is exact (there is no spelling to resolve). Only recognised indicators reach the database — a row the tool cannot recognise never lands as a row.
+**Decision:** An unrecognised indicator label or commodity is a blocking item at review, not a silent import. An unrecognised indicator label surfaces with its section's known indicators offered as a pick-list — the operator maps it to one, or fixes the source; a known wording variant is resolved to its canonical form automatically and imports without interruption. An unrecognised commodity blocks with a fix-in-source problem and no suggestions, because its HS code is exact (there is no spelling to resolve). Only recognised indicators reach the database — a row the tool cannot recognise never lands as a row, with one deliberate exception: specific archived declarations named in `preserve_nonstandard_disclosure_rows` have their operator-added, non-Standard rows relocated to the additional-info capture for preservation rather than blocked (see *What happens to an operator-added disclosure row that matches no Standard indicator in an archived file?*).
 
 **Rationale:** A 0 foreign key silently written to the public database is invisible data loss: an operator querying the data cannot tell a real indicator from an unrecognised one that collapsed to 0, and the gap surfaces only if someone thinks to look for zeros. Deciding recognition before the review gate — the same point at which an unknown Sector already blocks — turns that silent gap into a decision the operator makes with the file in front of them. The asymmetry that makes this safe: recognising a value against a closed vocabulary can fail and must be reviewable, but once a value is recognised the lookup to its database id cannot fail, so that half stays downstream.
 
