@@ -473,7 +473,7 @@ When a field is allowed to be both "Not available" and "Not applicable", the cel
 
 **Rationale:** With no per-row currency column there is no way to detect a mixed-currency v1 file, and in practice these files predate the multinational-USD-payment situation that motivated the per-row column. Treating every row as reporting-currency mirrors how the submitter implicitly thought about the file when they filled it in.
 
-**Technical detail:** In the `STATS_REGISTRY` entry for `summary_v1`, `StatsCurrency.gov_per_row` and `StatsCurrency.comp_per_row` are both `None`. The stats engines read those nulls into `gov_currency_field` and `comp_currency_field` and so never try to look up a per-row currency on a v1 row; `_canonical_row_currency` then canonicalises the absent cell to the reporting currency, and `convert()` routes the row through its `row_currency == reporting_currency` branch. The currency-quality crosscheck in `packages/shared/src/shared/families/sdf.py` skips v1 entirely on the same signal (via its `has_row_currencies` guard).
+**Technical detail:** In the `STATS_REGISTRY` entry for `summary_v1`, `StatsCurrency.gov_per_row` and `StatsCurrency.comp_per_row` are both `None`. The stats engines read those nulls into `gov_currency_field` and `comp_currency_field` and so never try to look up a per-row currency on a v1 row; `_canonical_row_currency` then canonicalises the absent cell to the reporting currency, and `convert()` routes the row through its `row_currency == reporting_currency` branch. The currency-quality crosscheck in `packages/shared/src/shared/families/sdf.py` skips v1 on the same signal — its guard returns no findings when `StatsCurrency.gov_per_row` and `comp_per_row` are both null.
 
 ### Where does the tool get exchange rates for old v1 files?
 <!-- scenario: compare-across-versions; topic: currency-financial-calculations -->
@@ -1026,7 +1026,7 @@ Within one file, the tool does link mentions of the same entity on its own — b
 
 **Rationale:** A zero-row table sums to zero silently, and reconciliation would then show a 100% gap or a meaningless "0 vs 0 match". Surfacing the empty table as its own warning tells the reviewer the tool ran end to end but found nothing in the table — a different problem to fix in the source file than a parsing failure.
 
-**Technical detail:** `_check_table_completeness` in `packages/crosschecker/src/crosschecker/crosschecker_service.py` emits `GOV_REVENUE_TABLE_EMPTY` / `COMP_PAYMENTS_TABLE_EMPTY`. Table names are read from `TABLE_KEYS` in `packages/shared/src/shared/submission_metadata.py`, keyed by SubmissionID. The check is deliberately silent on missing tables to avoid duplicating upstream parser findings (`SHEET_NOT_FOUND`, `BLOCK_PARSING_ERROR`).
+**Technical detail:** `_make_table_completeness_check` in `packages/shared/src/shared/families/sdf.py` emits `GOV_REVENUE_TABLE_EMPTY` / `COMP_PAYMENTS_TABLE_EMPTY`. The gov/comp table names are read from the submission's `RevenueStatsConfig.tables` (via `resolve_revenue_stats`). The check is deliberately silent on missing tables to avoid duplicating upstream parser findings (`SHEET_NOT_FOUND`, `BLOCK_PARSING_ERROR`).
 
 ### When does the tool flag a currency-declaration contradiction?
 <!-- scenario: reconcile-government-vs-companies; topic: consistency-rules -->
@@ -1456,7 +1456,7 @@ The consequence is that `metadata_options_simple` and `metadata_options_reportin
 
 **Rationale:** v1 files genuinely have only one currency per declaration. A per-row check would have nothing to compare against; running it would either produce noise or invent currencies that aren't in the file. Treating the About-sheet currency as the single source of truth matches how v1 reports actually compute their totals.
 
-**Technical detail:** In `packages/shared/src/shared/stats_config.json`, `currency_field.summary_v1` is `{"gov": null, "comp": null}` for both sides. The currency-quality closure built by `_make_currency_quality_check` in `packages/shared/src/shared/families/sdf.py` short-circuits via its `has_row_currencies` guard when both fields are null. The v1 totals spec omits `group_by`, producing a scalar comparison.
+**Technical detail:** In `packages/shared/src/shared/stats_config.json`, `currency_field.summary_v1` is `{"gov": null, "comp": null}` for both sides. The currency-quality closure built by `_make_currency_quality_check` in `packages/shared/src/shared/families/sdf.py` short-circuits (returns no findings) when both per-row currency fields are null. The v1 totals spec omits `group_by`, producing a scalar comparison.
 
 ### How is the v1 revenue sheet shaped compared to v2?
 <!-- scenario: compare-across-versions; topic: version-differences -->
