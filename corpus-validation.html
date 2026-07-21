@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none';">
+  <title>EITI Data Importer — Corpus validation</title>
+  <meta name="description" content="Which source carries each EITI v1 country–year declaration: the individual Summary Data Files, the API extract, or both.">
+  <link rel="icon" type="image/svg+xml" href="cli-logo.svg">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="corpus-validation.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <nav class="site-nav" aria-label="Sections">
+        <a href="./">Decision log</a>
+        <a href="corpus-validation.html" aria-current="page">Corpus validation</a>
+      </nav>
+      <p class="eyebrow">EITI Data Importer</p>
+      <h1>Corpus validation</h1>
+      <p class="lede">Which source carries each country–year declaration — the individual Summary Data Files, the API extract, or both.</p>
+    </div>
+  </header>
+
+  <main id="content" class="wrap" aria-busy="true" aria-live="polite">
+    <div class="statbar" id="stats"></div>
+
+    <div class="controls">
+      <div class="legend">
+        <span class="lg"><span class="sw both"></span>Both sources</span>
+        <span class="lg"><span class="sw sdf"></span>SDF only</span>
+        <span class="lg"><span class="sw api"></span>API only</span>
+        <span class="lg"><span class="sw mk"></span>Year joined EITI</span>
+      </div>
+      <div class="tools">
+        <div class="toggle-wrap">
+          <button id="unexpBtn" class="toggle" type="button" aria-pressed="false">Unexplained gaps only</button>
+          <span class="info" tabindex="0" role="note" aria-label="What 'unexplained gaps' means">i<span class="tip">Shows only countries with a year in the API extract but no Summary Data File on record — genuinely missing declarations (Nigeria's pre-2012 gaps, Ethiopia 2014–2015, Mongolia 2010). Years that exist only as a v2-template file are not counted.</span></span>
+        </div>
+        <label class="sel"><span>Status</span>
+          <select id="statusSel">
+            <option value="all">All countries</option>
+            <option value="Member">Members</option>
+            <option value="Suspended">Suspended</option>
+            <option value="Withdrawn">Withdrawn</option>
+          </select>
+        </label>
+        <label class="sel"><span>Sort</span>
+          <select id="sortSel">
+            <option value="pattern">Coverage</option>
+            <option value="first">First year</option>
+            <option value="name">A–Z</option>
+            <option value="span">Longest span</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="matrix-wrap" id="matrix-wrap">
+      <table id="grid"><thead></thead><tbody></tbody></table>
+    </div>
+
+    <p class="note">
+      <b>16 country-years appear only in the API extract.</b> Eleven have no
+      Summary Data File on record — chiefly Nigeria's pre-2012 years, with
+      Ethiopia 2014–2015 and Mongolia 2010 — and five exist only in the v2
+      template (Argentina 2018, Ethiopia 2016, Liberia 2019, Mali 2017–2018).
+      Cohort years follow the reporting period's end year, EITI's own convention.
+    </p>
+  </main>
+
+  <footer class="site-footer">
+    <p>Mirrored from <a href="https://github.com/civicliteracies/eiti-importer-decisions">civicliteracies/eiti-importer-decisions</a>. Released under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</p>
+  </footer>
+
+  <script src="corpus-validation.js" defer></script>
+</body>
+</html>
