@@ -47,6 +47,19 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 ---
 
+### What are the real EITI New indicator ids for the forestry and agriculture license registers?
+<!-- scenario: trust-the-data; topic: pending-decisions -->
+
+**Situation:** The v2 SDF "Register of licenses" checklist (EITI Requirement 2.3) carries a license-register row per sector — mining, petroleum, other, fishery, and also forestry and agriculture. The EITI indicator equivalences workbook assigns a New indicator id to the first four (81, 82, 83, 84) but rolls the forestry and agriculture rows onto ids 85 and 86 — which are Requirement 2.4 contract-disclosure *policy* questions ("Government policy on contract disclosure", "Are contracts disclosed?"), not Register-of-licenses rows. Because recognition is scoped to a row's stamped Requirement section, a forestry/agriculture license-register row (stamped Requirement 2.3) can never resolve to a Requirement 2.4 id, so the answer landed unrecognized in the eight v2 files that disclose these sectors.
+
+**Question:** What real New indicator ids does the EITI equivalences workbook intend for the forestry and agriculture license registers (and are they `reporting_type`, matching the mining/petroleum/other siblings)? EITI has not assigned them; the workbook rollup onto 85/86 is a transcription error, not a real mapping.
+
+**Status quo:** The tool mints two synthetic placeholder ids — `syn-license-register-forestry` and `syn-license-register-agriculture` — as Requirement 2.3 indicators of type `reporting_type`, and points the two surface forms at them so the rows resolve within their section. The synthetic ids carry the string form every other derived shorthand uses (`req-3.2-value`, `gdp-asm-formal`), so they are unmistakable from a workbook integer id and greppable for replacement. The compromise: these ids do not match the upstream workbook's scheme, so any downstream artefact keyed on the New indicator id (charts, cross-file joins) will need a remap when the real ids arrive.
+
+**Technical detail:** The two indicators live in `_INDICATORS_RAW` in `packages/stores/eiti/src/eiti/eiti_indicators.py` and are listed in `PROVISIONAL_SYNTHETIC_INDICATOR_SHORTHANDS`; the two realigned aliases are in `_INDICATOR_ALIASES_RAW` in `packages/stores/eiti/src/eiti/eiti_indicator_aliases.py`. When EITI confirms the real ids: replace both shorthands (and their `INDICATOR_INTRODUCED_VERSION` entries and the two aliases), then delete `PROVISIONAL_SYNTHETIC_INDICATOR_SHORTHANDS` and this entry.
+
+---
+
 ## 1. Data Quality Policy
 
 ### What kinds of errors can be fixed in the tool?
