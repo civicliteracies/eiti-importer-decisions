@@ -1607,6 +1607,30 @@ This is a preservation move, scoped exactly like the value corrections above: it
 
 ---
 
+### What does the tool do with a v1 file's "Registry 2" row and registry values that aren't contract registries?
+<!-- scenario: trust-the-data; topic: version-differences -->
+
+**Situation:** The v1 template's Requirement 3.12 contracts section carries two registry rows: "Publicly available registry of contracts" and a second, generically-labelled "Registry 2" slot (the template instructs "Add/remove rows as necessary, per registry"). Operators fill both with whatever their country publishes — a contract registry, a license register, a mining-agency name, a disclosure portal, or a bare "-". "Registry 2" was previously unrecognised, so it blocked the whole v1 file at recognition.
+
+**Decision:** "Registry 2" is recognised as a second value of the contracts-registry indicator (New id 28), the same indicator its sibling row already resolves to. A full corpus review confirms the group never goes beyond two rows. Recognition is section-scoped, so the generic label resolves only under Requirement 3.12. The imported *value* is kept faithful to what the operator wrote — indicator 28 is a free-text "where the registry is" disclosure whose first row already carries the same heterogeneous shapes (registries, agency names, portals). v1 has a single registry indicator where v2 later split contract and license registers into separate ones, so a license register recorded here is *less granular*, not misclassified; it is not corrected. Only a cell that discloses nothing — a bare "-", which the sentinel set deliberately does not treat as "not available" — is corrected to NV so it doesn't import as a literal dash.
+
+**Why not blank the license/agency values:** the clean tier is a faithful projection of what was disclosed (ADR-034), not a quality filter; the raw tier preserves the exact source regardless. Blanking a real "here's where our registry is" disclosure to record "not available" would delete transparency data for a value that isn't wrong, only coarser than the v2 model. The EITI Standard version each indicator belongs to is recorded on the indicator, so a consumer can distinguish a v1 (single-slot) registry disclosure from a v2 (contract-vs-license) one.
+
+**Technical detail:** the alias `("Registry 2", "28")` lives in `_CURATED_REMOVE_ALIASES` (`packages/stores/eiti/src/eiti/eiti_indicator_aliases.py`); the cleaner's section-scoped alias arm resolves it. The one non-value correction (Zambia 2012/2013 "-") is an `AbsoluteCorrection` in `_CORRECTIONS` (`declaration_value_corrections.py`), which is now registered on the v1 transform tuple as well as v2. This retired the single-purpose `drop_nonstandard_empty_rows` transform (an empty "Registry 2" is now a recognised NV row through the standard path).
+
+---
+
+### What does the tool do with a v1 file whose companies table is present but empty?
+<!-- scenario: trust-the-data; topic: version-differences -->
+
+**Situation:** A v1 Revenues sheet can carry the companies pivot's header anchor ("Legal name") with no company columns under it — the operator set up the table but listed no companies. The locator previously reported this identically to a missing table, and a missing required table terminates the file (`BLOCK_PARSE_FAILED`), so the whole declaration — including its government revenue — was lost.
+
+**Decision:** A present-but-empty required table (anchor found, zero rows) is distinct from an absent one (no anchor) and imports as an empty table rather than terminating the file. The declaration keeps its other tables (government revenue imports with zero companies). Because the empty table would otherwise be invisible downstream — validation drops empty tables before the mapper sees them — the parser emits an informational `LOCATED_TABLE_EMPTY` finding recording that the empty table was an observed outcome, not a silent parse failure. An absent table (no anchor at all) still blocks, unchanged.
+
+**Technical detail:** `PivotHeaderLocator.locate` (`packages/parser/src/parser/extraction/location_strategies.py`) returns an empty `TableRegion` on zero columns and `None` only when the anchor is missing; `TableExtractor` emits `LOCATED_TABLE_EMPTY` (in `_SCHEMA_DEVIATION_PARSER_CODES`, non-blocking) for any located required table that reads zero rows.
+
+---
+
 ## Cross-Cutting
 
 ### How are numeric IDs from Excel handled?
