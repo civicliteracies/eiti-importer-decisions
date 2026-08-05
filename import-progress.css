@@ -1,0 +1,127 @@
+/* Import-progress page — styled to the EITI Design System (navy #132856 + amber #F6A70A, Metropolis,
+   uppercase eyebrows, pill chips, tabular figures). Self-contained tokens so the page renders the
+   same whether or not the mirror's shared style.css is present; only the top nav comes from there.
+   Emphasis is carried by the amber accent and weight, never by opacity on small text (AA). */
+
+.wrap { max-width: 60rem; margin: 0 auto; padding: 2.4rem 1.5rem 5rem; }
+:root {
+  --eiti-navy: #132856; --eiti-navy-2: #15517f; --eiti-amber: #f6a70a;
+  /* amber-ink is the AA-passing amber for TEXT and the progress bar (5.5:1 on white); the bright
+     brand --eiti-amber is reserved for the timeline node (decorative, redundant with the text). */
+  --eiti-amber-ink: #8a5f0a;
+  --eiti-ink: #111a35; --eiti-muted: #5b6473; /* AA muted text (~5:1 on white) */
+  --eiti-bg: #f8fafb; --eiti-surface: #ffffff;
+  --eiti-border-subtle: #e5e5e5; --eiti-border: #dddddd;
+  --eiti-mono: "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+.loading { color: var(--eiti-ink); opacity: .6; font-size: .9rem; }
+
+.asof {
+  font-size: .72rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--eiti-navy); opacity: .7; margin: 0 0 1.6rem;
+}
+
+/* ---- Snapshot: one card per import type. flex-column pins the number + bar to the card's
+   bottom edge, so a label that wraps to two lines never pushes its number out of line. ---- */
+.snapshot {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 1rem; margin: 0 0 1.6rem;
+}
+.card {
+  display: flex; flex-direction: column; min-height: 7.5rem;
+  padding: 1rem 1.15rem 1.1rem; background: var(--eiti-surface);
+  border: 1px solid var(--eiti-border-subtle); border-radius: 8px;
+}
+/* A format still short of complete carries the amber "in progress" keyline; a complete one is solid navy. */
+.card:not(.complete) { border-left: 2px solid var(--eiti-amber); }
+.card-k {
+  font-size: .68rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--eiti-muted); line-height: 1.35;
+}
+.card-n {
+  /* nowrap + a size that keeps the widest "imported/total" (e.g. 473/475) on one line in the
+     ~9.5rem card at the mirror's Metropolis face, which is wider than a fallback sans. */
+  margin: auto 0 0; font-size: 1.55rem; font-weight: 700; color: var(--eiti-navy);
+  font-variant-numeric: tabular-nums; letter-spacing: -.02em; white-space: nowrap;
+}
+.card-n .sep { color: var(--eiti-border); font-weight: 400; margin: 0 .04em; }
+.card-n .tot { color: var(--eiti-muted); }
+.bar { height: 4px; border-radius: 999px; background: var(--eiti-bg); overflow: hidden; margin-top: .7rem; }
+.bar-fill { height: 100%; border-radius: 999px; background: var(--eiti-navy); }
+.card:not(.complete) .bar-fill { background: var(--eiti-amber-ink); }
+
+.note { font-size: .84rem; line-height: 1.6; color: var(--eiti-ink); opacity: .72; max-width: 46rem; }
+.metric-note { margin: 0 0 2.8rem; }
+.note a, .card a { color: var(--eiti-navy); text-decoration: underline; text-underline-offset: 2px; }
+.note a:hover { text-decoration-color: var(--eiti-amber); }
+
+.section-h {
+  font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--eiti-navy); margin: 0 0 1.5rem; padding-bottom: .5rem;
+  border-bottom: 1px solid var(--eiti-border-subtle);
+}
+
+/* ---- Timeline: a vertical spine, one dot per real file-import moment. Each dot leads with the
+   DATA (the count + file chips); the caption is a quieter line beneath it. ---- */
+.timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+.timeline::before {
+  content: ""; position: absolute; left: 5px; top: .45rem; bottom: .45rem;
+  width: 2px; background: var(--eiti-border-subtle);
+}
+.tl-item { position: relative; padding: 0 0 1.9rem 1.9rem; }
+.tl-item:last-child { padding-bottom: 0; }
+.tl-item::before {
+  content: ""; position: absolute; left: 0; top: .28rem; width: 12px; height: 12px;
+  border-radius: 50%; background: var(--eiti-surface);
+  border: 2px solid var(--eiti-navy);
+}
+/* A measured/curated file-import dot is filled amber; a bare marker (a capability landing with no
+   count) stays a hollow navy ring. Distinction by fill + colour, never opacity. */
+.tl-item.tl-diff::before { background: var(--eiti-amber); border-color: var(--eiti-amber); }
+
+.tl-date {
+  display: block; font-size: .74rem; font-weight: 600; letter-spacing: .02em;
+  color: var(--eiti-navy); font-variant-numeric: tabular-nums; margin-bottom: .5rem;
+}
+
+/* One row per type: a navy type tag, then the count, then (wrapping to their own line) the chips. */
+.tl-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .55rem; margin-top: .55rem; }
+.tl-group:first-of-type { margin-top: 0; }
+.type-tag {
+  font-size: .68rem; font-weight: 600; letter-spacing: .01em; padding: .16rem .5rem; border-radius: 5px;
+  background: rgba(19, 40, 86, .07); color: var(--eiti-navy); white-space: nowrap;
+}
+/* Categorical colour per import type — a cohesive set at one lightness (light tint + darker same-hue
+   text, all AA) so each format is distinguishable without any one reading louder than the rest. The
+   navy tag above is the fallback for an unknown type. */
+.type-tag.t-summary_v1 { background: #e6ecf6; color: #1b3a6b; }
+.type-tag.t-summary_v2 { background: #dcebe9; color: #1c5a52; }
+.type-tag.t-api_extract_v1 { background: #fbedcc; color: #855708; }
+.type-tag.t-company_assessment { background: #e5eede; color: #3d6029; }
+.type-tag.t-validation_data { background: #eae3f1; color: #523b79; }
+
+/* The count is the scannable element: "+N" in amber (what this step added), "imported/total" in navy. */
+.tl-count { display: inline-flex; align-items: baseline; gap: .4rem; font-variant-numeric: tabular-nums; }
+.tl-added { font-size: .82rem; font-weight: 700; color: var(--eiti-amber-ink); }
+.tl-progress { font-size: .8rem; font-weight: 600; color: var(--eiti-navy); }
+
+/* Chips are secondary: a full-width new line under the count, quiet mono pills. */
+.tl-chips { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .15rem; }
+.chip {
+  font-family: var(--eiti-mono); font-size: .7rem; color: var(--eiti-ink); opacity: .78;
+  background: var(--eiti-surface); border: 1px solid var(--eiti-border);
+  padding: .1rem .45rem; border-radius: 999px; white-space: nowrap;
+}
+.chip-more { border: none; background: none; color: var(--eiti-muted); font-style: italic; padding-left: .1rem; }
+
+.tl-caption { margin: .55rem 0 0; font-size: .84rem; line-height: 1.55; color: var(--eiti-ink); opacity: .72; max-width: 42rem; }
+
+@media (max-width: 30rem) {
+  .snapshot { grid-template-columns: 1fr 1fr; }
+}

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none';">
+  <title>EITI Data Importer — Import progress</title>
+  <meta name="description" content="How many EITI Summary Data files the importer successfully imports, per format, with a reverse-chronological record of when each step of that coverage landed.">
+  <link rel="icon" type="image/svg+xml" href="cli-logo.svg">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="import-progress.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <nav class="site-nav" aria-label="Sections">
+        <a href="./">Decision log</a>
+        <a href="corpus-validation.html">Corpus validation</a>
+        <a href="import-progress.html" aria-current="page">Import progress</a>
+      </nav>
+      <p class="eyebrow">EITI Data Importer</p>
+      <h1>Import progress</h1>
+      <p class="lede">How many EITI Summary Data files the importer successfully imports, per format — and when each step of that coverage landed.</p>
+    </div>
+  </header>
+
+  <main id="content" class="wrap" aria-busy="true">
+    <p class="loading" id="loading">Loading import progress…</p>
+    <!-- aria-live sits on this small status line, not the whole <main>, so a screen reader announces
+         a concise "last recorded progress" update rather than the entire snapshot + timeline. -->
+    <p class="asof" id="asof" aria-live="polite" hidden></p>
+
+    <section aria-labelledby="snapshot-h">
+      <h2 id="snapshot-h" class="sr-only">Files imported, by import type</h2>
+      <div class="snapshot" id="snapshot"></div>
+    </section>
+
+    <p class="note metric-note">
+      Each pair is how many files of that format the importer loads successfully, out of every file
+      it has received. A country can report the same year in more than one language, so those count
+      separately. See the <a href="corpus-validation.html">corpus-validation</a> page for the detail
+      behind each result.
+    </p>
+
+    <section aria-labelledby="timeline-h">
+      <h2 id="timeline-h" class="section-h">Timeline</h2>
+      <ol class="timeline" id="timeline"></ol>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Mirrored from <a href="https://github.com/civicliteracies/eiti-importer-decisions">civicliteracies/eiti-importer-decisions</a>. Released under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</p>
+  </footer>
+
+  <script src="import-progress.js" defer></script>
+</body>
+</html>
