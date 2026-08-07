@@ -4,8 +4,8 @@
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);
-  let DATA, STATUS, NAMES, SINCE, UNEXPLAINED, YEARS, rows;
-  let sortKey = "pattern", statusKey = "all", showUnexplained = false;
+  let DATA, STATUS, NAMES, SINCE, YEARS, rows;
+  let sortKey = "pattern", statusKey = "all";
   const patternRank = { "API-only": 0, "SDF-only": 1, "SDF+API": 2 };
   const statusOf = c => STATUS[c] || "Member";
   const nameOf = c => NAMES[c] || c;
@@ -21,10 +21,8 @@
       });
       const span = arr => (arr.length ? arr[arr.length - 1] - arr[0] + 1 : 0);
       const all = [...s, ...a];
-      const unexplained = UNEXPLAINED[c.country] || [];
       return {
         ...c, cells, status: statusOf(c.country), since: SINCE[c.country],
-        unexplained, hasUnexplained: unexplained.length > 0,
         firstYear: all.length ? Math.min(...all) : 9999,
         span: Math.max(span(c.sdf_years), span(c.api_years)),
       };
@@ -53,9 +51,7 @@
     : st === "Suspended" ? `<span class="stag susp">suspended</span>` : "";
 
   function render() {
-    let list = rows.filter(r =>
-      (statusKey === "all" || r.status === statusKey) &&
-      (!showUnexplained || r.hasUnexplained));
+    let list = rows.filter(r => statusKey === "all" || r.status === statusKey);
     if (sortKey === "name") list.sort(byName);
     else if (sortKey === "span") list.sort((a, b) => b.span - a.span || byName(a, b));
     else if (sortKey === "first") list.sort((a, b) => a.firstYear - b.firstYear || byName(a, b));
@@ -79,17 +75,12 @@
   function wire() {
     $("sortSel").addEventListener("change", e => { sortKey = e.target.value; render(); });
     $("statusSel").addEventListener("change", e => { statusKey = e.target.value; render(); });
-    $("unexpBtn").addEventListener("click", e => {
-      showUnexplained = !showUnexplained;
-      e.currentTarget.setAttribute("aria-pressed", String(showUnexplained));
-      render();
-    });
   }
 
   fetch("coverage.json")
     .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(j => {
-      ({ DATA, STATUS, NAMES, SINCE, UNEXPLAINED } = j);
+      ({ DATA, STATUS, NAMES, SINCE } = j);
       build(); stats(); wire(); render();
       const c = $("content"); if (c) c.setAttribute("aria-busy", "false");
     })

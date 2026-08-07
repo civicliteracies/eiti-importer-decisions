@@ -35,10 +35,6 @@
         <span class="lg"><span class="sw mk"></span>Year joined EITI</span>
       </div>
       <div class="tools">
-        <div class="toggle-wrap">
-          <button id="unexpBtn" class="toggle" type="button" aria-pressed="false">Unexplained gaps only</button>
-          <span class="info" tabindex="0" role="note" aria-label="What 'unexplained gaps' means">i<span class="tip">Shows only countries with a year in the API extract but no Summary Data File on record — genuinely missing declarations (Nigeria's pre-2012 gaps, Ethiopia 2014–2015, Mongolia 2010). Years that exist only as a v2-template file are not counted.</span></span>
-        </div>
         <label class="sel"><span>Status</span>
           <select id="statusSel">
             <option value="all">All countries</option>
@@ -63,11 +59,14 @@
     </div>
 
     <p class="note">
-      <b>16 country-years appear only in the API extract.</b> Eleven have no
-      Summary Data File on record — chiefly Nigeria's pre-2012 years, with
-      Ethiopia 2014–2015 and Mongolia 2010 — and five exist only in the v2
-      template (Argentina 2018, Ethiopia 2016, Liberia 2019, Mali 2017–2018).
-      Cohort years follow the reporting period's end year, EITI's own convention.
+      <b>Every country-year in the API extract now has a Summary Data File.</b>
+      The years that once had none on record — Nigeria's pre-2012 declarations,
+      Ethiopia 2014–2015, and Mongolia 2010 — have since been published by EITI
+      and are included here. Four country-years still show as API-only above —
+      Argentina 2018, Liberia 2019, and Mali 2017–2018 — because their only
+      Summary Data File uses the v2 template rather than a v1 one; the
+      declarations themselves are on record. Cohort years follow the reporting
+      period's end year, EITI's own convention.
     </p>
   </main>
 

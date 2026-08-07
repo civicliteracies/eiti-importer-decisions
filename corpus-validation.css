@@ -31,16 +31,6 @@
 .sw.mk::after { content: ""; position: absolute; left: 5px; top: 1px; bottom: 1px; width: 3px; background: var(--cov-marker); border-radius: 2px; }
 
 .tools { display: flex; align-items: flex-end; gap: .9rem 1rem; margin-left: auto; flex-wrap: wrap; }
-.toggle-wrap { display: flex; align-items: center; gap: .45rem; height: 38px; }
-.toggle { font-family: var(--sans); font-size: .8rem; font-weight: 600; color: var(--fg); background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px; height: 38px; padding: 0 .95rem; cursor: pointer; white-space: nowrap; }
-.toggle:hover { border-color: var(--accent); }
-.toggle[aria-pressed="true"] { background: var(--cov-api); border-color: var(--cov-api); color: #241800; }
-.info { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 999px; border: 1px solid var(--rule); color: var(--fg-subtle); font-size: .7rem; font-weight: 700; font-style: italic; cursor: help; flex: none; }
-.info:hover, .info:focus-visible { border-color: var(--accent); color: var(--accent); }
-.tip { position: absolute; bottom: calc(100% + 9px); right: -4px; width: 290px; max-width: 74vw; background: var(--fg); color: #fff; font-size: .72rem; font-weight: 400; font-style: normal; line-height: 1.5; text-transform: none; text-align: left; padding: .6rem .7rem; border-radius: 8px; opacity: 0; visibility: hidden; transition: opacity .14s; z-index: 10; box-shadow: 0 8px 24px rgba(19, 40, 86, .22); pointer-events: none; }
-.tip::after { content: ""; position: absolute; top: 100%; right: 9px; border: 6px solid transparent; border-top-color: var(--fg); }
-.info:hover .tip, .info:focus-visible .tip { opacity: 1; visibility: visible; }
-
 .sel { display: flex; flex-direction: column; gap: .3rem; }
 .sel > span { font-size: .62rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--fg-subtle); }
 .sel select { font-family: var(--sans); font-size: .82rem; font-weight: 500; color: var(--fg); background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 8px; height: 38px; padding: 0 .75rem; cursor: pointer; }
