@@ -96,9 +96,10 @@
   // "+N more" count, so the timeline stays legible without hiding the scale.
   const CHIP_CAP = 18;
 
-  // For the chip hover title: expand the ISO3 country code + language suffix a reader may not
-  // recognise. The set is the EITI member countries in the data; an unknown code falls back to
-  // itself, so a future country still renders (just without the long-form name on hover).
+  // For the chip hover title: expand the ISO3 country code + the 2-letter language code a reader may
+  // not recognise (the one per-file metadata value the chip suffix carries today). The set is the
+  // EITI member countries in the data; an unknown code falls back to itself, so a future country
+  // still renders (just without the long-form name on hover).
   /** @type {Record<string, string>} */
   const COUNTRY = {AFG:"Afghanistan", AGO:"Angola", ALB:"Albania", ARG:"Argentina", ARM:"Armenia", AZE:"Azerbaijan", BFA:"Burkina Faso", CAF:"Central African Rep.", CIV:"Côte d'Ivoire", CMR:"Cameroon", COD:"DR Congo", COG:"Congo", COL:"Colombia", DEU:"Germany", DOM:"Dominican Republic", ECU:"Ecuador", ETH:"Ethiopia", GAB:"Gabon", GBR:"United Kingdom", GHA:"Ghana", GIN:"Guinea", GTM:"Guatemala", GUY:"Guyana", HND:"Honduras", IDN:"Indonesia", IRQ:"Iraq", KAZ:"Kazakhstan", KGZ:"Kyrgyzstan", LBR:"Liberia", MDG:"Madagascar", MEX:"Mexico", MLI:"Mali", MMR:"Myanmar", MNG:"Mongolia", MOZ:"Mozambique", MRT:"Mauritania", MWI:"Malawi", NER:"Niger", NGA:"Nigeria", NLD:"Netherlands", NOR:"Norway", PER:"Peru", PHL:"Philippines", PNG:"Papua New Guinea", SEN:"Senegal", SLB:"Solomon Islands", SLE:"Sierra Leone", STP:"São Tomé & Príncipe", SUR:"Suriname", SYC:"Seychelles", TCD:"Chad", TGO:"Togo", TJK:"Tajikistan", TLS:"Timor-Leste", TTO:"Trinidad & Tobago", TZA:"Tanzania", UGA:"Uganda", UKR:"Ukraine", USA:"United States", ZMB:"Zambia"};
   /** @type {Record<string, string>} */
