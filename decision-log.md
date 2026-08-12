@@ -8,6 +8,19 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 ## 0. Pending Decisions
 
+### Why was Indonesia 2021 removed from the database?
+<!-- scenario: trust-the-data; topic: pending-decisions -->
+
+**Situation:** The Indonesia 2021 SDF file was found to have likely wrong declared currency on some of its payment rows as the total value of declared payments reached $800B USD, far above Indonesia's expected range of revenue from extractives. Reviewing the file did not allow us to identify if only a few specific payments were wrong, or all of them, and whether it was a problem with the currency only or the figures being wrong.
+
+**Question:** Are the figures in the Indonesia 2021 SDF file incorrect, or is the currency incorrectly declared?
+
+**Status quo:** We decided to remove Indonesia 2021 from the database for now and ask EITI for further guidance. A task was created to tackle implausible figures more generally.
+
+**Technical detail:** The file has been excluded from imports pending resolution from EITI.
+
+---
+
 ### Should the Commodity enum gain "Oil & Gas" / "Condensate" aggregates?
 <!-- scenario: trust-the-data; topic: pending-decisions -->
 
