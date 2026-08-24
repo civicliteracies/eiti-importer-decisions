@@ -1,0 +1,25 @@
+{
+  "entity_type": "gov_entity",
+  "seed": 20260821,
+  "created_epoch": 1787559077,
+  "strata": {
+    "merge": {
+      "population": 249,
+      "sampled": 249,
+      "design": "census",
+      "confirmations_required": 2
+    },
+    "split": {
+      "population": 12223,
+      "sampled": 50,
+      "design": "spot-check n=50",
+      "confirmations_required": 1
+    },
+    "disposition": {
+      "population": 1131,
+      "sampled": 288,
+      "design": "±5% CI",
+      "confirmations_required": 1
+    }
+  }
+}
