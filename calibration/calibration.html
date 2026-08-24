@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- This page's OWN CSP (per-page meta; the mirror sets no server CSP). It adds api.github.com to
+       connect-src for the coordination reads/writes, and font-src 'self' for the shared Metropolis
+       @font-face in ../style.css. The other published pages keep their strict connect-src 'self'. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://api.github.com; base-uri 'none'; form-action 'none';">
+  <title>EITI Data Importer — Panel calibration</title>
+  <meta name="description" content="Blind human review of the deduplication panel's unanimous decisions, to measure their accuracy.">
+  <link rel="icon" type="image/svg+xml" href="../cli-logo.svg">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="calibration.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <nav class="site-nav" aria-label="Sections">
+        <a href="../">Decision log</a>
+        <a href="../corpus-validation.html">Corpus validation</a>
+        <a href="../import-progress.html">Import progress</a>
+        <a href="calibration.html" aria-current="page">Calibration</a>
+      </nav>
+      <p class="eyebrow">EITI Data Importer</p>
+      <h1>Panel calibration</h1>
+      <p class="lede">Blind review of the deduplication panel's unanimous decisions — judge each on its own merits; the panel's answer stays hidden until you commit.</p>
+    </div>
+  </header>
+
+  <main id="content" class="wrap">
+    <div id="banner" class="banner" role="status"></div>
+    <div id="app"></div>
+  </main>
+
+  <script src="review-widget.js"></script>
+  <script src="calibration-core.js"></script>
+  <script src="calibration.js"></script>
+</body>
+</html>
