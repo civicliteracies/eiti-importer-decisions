@@ -60,5 +60,29 @@ select, .name-input {
 .bucket .state-tag { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-subtle); }
 .bucket.available { border-left-color: #1e7d43; }
 .bucket.mine { border-left-color: var(--accent); }
-.bucket.claimed { border-left-color: var(--pending-accent); opacity: 0.72; }
-.bucket.complete { border-left-color: var(--fg-subtle); opacity: 0.55; }
+.bucket.claimed { border-left-color: var(--pending-accent); opacity: 0.85; }
+.bucket.complete { border-left-color: var(--fg-subtle); opacity: 0.72; }
+
+/* board action bar */
+.board-actions { display: flex; gap: 0.5rem; align-items: center; }
+
+/* per-bucket role tags: ✓ finished, ◷ mid-review; .me marks the current reviewer */
+.bucket .who { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.15rem 0 0.5rem; }
+.tag { display: inline-block; border-radius: 999px; padding: 0.1rem 0.55rem; font-size: 0.72rem; font-weight: 500;
+  border: 1px solid var(--rule-soft); background: var(--bg-soft); color: var(--fg-muted); }
+.tag.done { background: #e6f4ea; color: #1e7d43; border-color: transparent; }
+.tag.wip { background: var(--pending-bg); color: var(--pending); border-color: transparent; }
+.tag.me { outline: 2px solid var(--accent); outline-offset: 1px; font-weight: 700; }
+
+/* progress summary modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: flex;
+  align-items: flex-start; justify-content: center; padding: 3rem 1rem; z-index: 50; overflow-y: auto; }
+.modal { background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 14px;
+  padding: 1.75rem; box-shadow: var(--shadow); max-width: 36rem; width: 100%; }
+.sum-strata { margin: 0.75rem 0; }
+.sum-row { font-size: 0.88rem; color: var(--fg-muted); padding: 0.15rem 0; text-transform: capitalize; }
+.sum-table { width: 100%; border-collapse: collapse; margin: 0.75rem 0 1rem; font-size: 0.88rem; }
+.sum-table th, .sum-table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--rule-soft); }
+.sum-table th { font-weight: 600; color: var(--fg-subtle); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.sum-table tr.me td { font-weight: 700; color: var(--accent); }
+.sum-table td:not(:first-child), .sum-table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }

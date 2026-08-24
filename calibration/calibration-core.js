@@ -86,22 +86,87 @@
    * @param {string} reviewer
    * @param {number} now
    * @param {number} [ttlMs]
-   * @returns {{ state: string, mine: boolean, holders: string[], required: number, done: boolean }}
+   * @returns {{ state: string, mine: boolean, holders: string[], completers: string[], claimants: string[], remaining: number, required: number, done: boolean }}
    */
   function bucketStatus(bucketState, required, reviewer, now, ttlMs) {
     ttlMs = ttlMs ?? DEFAULT_TTL_MS;
     var b = bucketState || { claimants: [], completed_by: [] };
-    var done = (b.completed_by || []).length >= required;
-    var iCompleted = (b.completed_by || []).indexOf(reviewer) !== -1;
+    var completers = (b.completed_by || []).slice();
+    var done = completers.length >= required;
+    var iCompleted = completers.indexOf(reviewer) !== -1;
     var held = holders(b, now, ttlMs);
     var iHold = held.has(reviewer);
+    // active claimants who have NOT completed — the people currently mid-review (role distinct from completers)
+    var claimants = activeClaimants(b, now, ttlMs).map(function (/** @type {Claimant} */ c) { return c.name; });
     var state;
     if (iCompleted) state = "complete";           // I finished it (regardless of others)
     else if (done) state = "complete";            // enough others finished
     else if (iHold) state = "mine";               // I hold a live slot
     else if (held.size >= required) state = "claimed"; // others hold all slots
     else state = "available";
-    return { state: state, mine: iHold || iCompleted, holders: Array.from(held), required: required, done: done };
+    return {
+      state: state,
+      mine: iHold || iCompleted,
+      holders: Array.from(held),
+      completers: completers,
+      claimants: claimants,
+      remaining: Math.max(0, required - completers.length), // confirmations still needed
+      required: required,
+      done: done,
+    };
+  }
+
+  /**
+   * Campaign-wide progress for the summary dashboard — reviewer-agnostic. Pure over (buckets, state).
+   * Buckets: the buckets.json array ({ bucket_id, stratum, item_ids, confirmations_required }).
+   * @param {Array<{ bucket_id: string, stratum: string, item_ids: string[], confirmations_required: number }>} buckets
+   * @param {CoordState} state
+   * @param {number} now
+   * @param {number} [ttlMs]
+   */
+  function campaignSummary(buckets, state, now, ttlMs) {
+    ttlMs = ttlMs ?? DEFAULT_TTL_MS;
+    var st = state || emptyState();
+    var roster = (st.roster || []).slice();
+    /** @typedef {{ name: string, bucketsCompleted: number, bucketsInProgress: number, itemsReviewed: number }} Seat */
+    /** @type {Record<string, Seat>} */
+    var per = {};
+    /** @param {string} n @returns {Seat} */
+    function seat(n) {
+      var r = per[n];
+      if (!r) { r = { name: n, bucketsCompleted: 0, bucketsInProgress: 0, itemsReviewed: 0 }; per[n] = r; }
+      return r;
+    }
+    roster.forEach(seat);
+    /** @type {Record<string, { total: number, complete: number }>} */
+    var strata = {};
+    var totals = { buckets: 0, complete: 0, inProgress: 0, available: 0, items: 0, judgments: 0 };
+    (buckets || []).forEach(function (bk) {
+      var bs = st.buckets && Object.prototype.hasOwnProperty.call(st.buckets, bk.bucket_id) ? st.buckets[bk.bucket_id] : undefined;
+      var completedBy = (bs && bs.completed_by) || [];
+      var nItems = (bk.item_ids || []).length;
+      var strat = bk.stratum || "?";
+      var ps = strata[strat];
+      if (!ps) { ps = { total: 0, complete: 0 }; strata[strat] = ps; }
+      ps.total += 1;
+      totals.buckets += 1;
+      totals.items += nItems;
+      var isComplete = completedBy.length >= bk.confirmations_required;
+      var active = bs ? activeClaimants(bs, now, ttlMs) : [];
+      if (isComplete) { totals.complete += 1; ps.complete += 1; }
+      else if (active.length) totals.inProgress += 1;
+      else totals.available += 1;
+      completedBy.forEach(function (/** @type {string} */ n) {
+        var r = seat(n); r.bucketsCompleted += 1; r.itemsReviewed += nItems; totals.judgments += nItems;
+      });
+      active.forEach(function (/** @type {Claimant} */ c) {
+        if (completedBy.indexOf(c.name) === -1) seat(c.name).bucketsInProgress += 1;
+      });
+    });
+    /** @type {Seat[]} */
+    var perReviewer = [];
+    Object.keys(per).sort().forEach(function (k) { var r = per[k]; if (r) perReviewer.push(r); });
+    return { reviewers: roster.length, totals: totals, perStratum: strata, perReviewer: perReviewer };
   }
 
   /**
@@ -251,6 +316,7 @@
     activeClaimants: activeClaimants,
     holders: holders,
     bucketStatus: bucketStatus,
+    campaignSummary: campaignSummary,
     validateReviewerName: validateReviewerName,
     registerName: registerName,
     claim: claim,

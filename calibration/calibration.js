@@ -262,16 +262,37 @@
     root.textContent = "";
     var now = Date.now();
     root.appendChild(el("h2", null, "Buckets — " + reviewer));
+    var bar = el("div", "board-actions");
     var refresh = button("Refresh", function () { refreshState().then(renderBoard).catch(function (e) { reportSyncFailure(e); }); });
-    refresh.className = "secondary"; root.appendChild(refresh);
+    refresh.className = "secondary"; bar.appendChild(refresh);
+    var sum = button("Progress summary", showSummary); sum.className = "secondary"; bar.appendChild(sum);
+    root.appendChild(bar);
     var grid = el("div", "board");
     BUCKETS.forEach(function (b) {
       var st = C.bucketStatus(state.buckets[b.bucket_id], b.confirmations_required, reviewer, now);
       var cell = el("div", "bucket " + st.state);
       cell.appendChild(el("div", "bid", b.bucket_id));
-      cell.appendChild(el("div", "meta", b.item_ids.length + " items · needs " + b.confirmations_required +
-        (st.holders.length ? " · " + st.holders.join(", ") : "")));
-      cell.appendChild(el("div", "state-tag", st.state));
+      // headline: item count + confirmations still needed (counts down as reviewers finish), or complete.
+      cell.appendChild(el("div", "meta", st.done
+        ? b.item_ids.length + " items · ✓ complete"
+        : b.item_ids.length + " items · needs " + st.remaining + " more of " + st.required));
+      // roles, distinct: ✓ = finished, ◷ = mid-review; "you" called out so your work is unmistakable.
+      var who = el("div", "who");
+      st.completers.forEach(function (/** @type {string} */ n) {
+        who.appendChild(el("span", "tag done" + (n === reviewer ? " me" : ""), "✓ " + (n === reviewer ? "you" : n)));
+      });
+      st.claimants.forEach(function (/** @type {string} */ n) {
+        if (st.completers.indexOf(n) !== -1) return;
+        who.appendChild(el("span", "tag wip" + (n === reviewer ? " me" : ""), "◷ " + (n === reviewer ? "you" : n) + " reviewing"));
+      });
+      if (who.childNodes.length) cell.appendChild(who);
+      // status label: distinguish "fully confirmed" from "you finished, still awaiting others".
+      var tag = st.done ? "confirmed"
+        : st.state === "complete" ? "you're done · awaiting " + st.remaining + " more"
+        : st.state === "mine" ? "in progress"
+        : st.state === "claimed" ? "claimed by others"
+        : "available";
+      cell.appendChild(el("div", "state-tag", tag));
       if (!authFailed && (st.state === "available" || st.state === "mine")) {
         cell.appendChild(button(st.state === "mine" ? "Continue" : "Claim + open", function () { openBucket(b); }));
       }
@@ -279,6 +300,60 @@
     });
     root.appendChild(grid);
     var exp = button("Export my verdicts", exportLocal); exp.className = "secondary"; root.appendChild(exp);
+  }
+
+  // Progress dashboard — a modal over the campaign-wide summary (pure C.campaignSummary).
+  function showSummary() {
+    var s = C.campaignSummary(BUCKETS, state, Date.now());
+    var t = s.totals;
+    var overlay = el("div", "modal-overlay");
+    overlay.onclick = function (e) { if (e.target === overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay); };
+    var modal = el("div", "modal");
+    modal.appendChild(el("h2", null, "Progress summary"));
+    modal.appendChild(el("p", "muted",
+      s.reviewers + " reviewer" + (s.reviewers === 1 ? "" : "s") + " registered · "
+      + t.complete + " of " + t.buckets + " buckets confirmed · "
+      + t.inProgress + " in progress · " + t.judgments + " item-judgments recorded"));
+    var strata = el("div", "sum-strata");
+    Object.keys(s.perStratum).sort().forEach(function (k) {
+      var ps = s.perStratum[k];
+      strata.appendChild(el("div", "sum-row", k + " — " + ps.complete + " / " + ps.total + " buckets confirmed"));
+    });
+    modal.appendChild(strata);
+    var table = el("table", "sum-table");
+    var head = el("tr");
+    ["Reviewer", "Done", "In progress", "Items"].forEach(function (h) { head.appendChild(el("th", null, h)); });
+    table.appendChild(head);
+    s.perReviewer.forEach(function (/** @type {any} */ r) {
+      var tr = el("tr", r.name === reviewer ? "me" : null);
+      tr.appendChild(el("td", null, r.name === reviewer ? r.name + " (you)" : r.name));
+      tr.appendChild(el("td", null, String(r.bucketsCompleted)));
+      tr.appendChild(el("td", null, String(r.bucketsInProgress)));
+      tr.appendChild(el("td", null, String(r.itemsReviewed)));
+      table.appendChild(tr);
+    });
+    if (!s.perReviewer.length) modal.appendChild(el("p", "muted", "No reviewers have registered yet."));
+    else modal.appendChild(table);
+    var close = button("Close", function () { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); });
+    close.className = "secondary"; modal.appendChild(close);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+  }
+
+  // Auto-refresh: poll the shared state on the board so concurrent reviewers see each other without a
+  // manual Refresh. Board-mode only (never mid-label, so it can't disrupt a review); a failed poll is
+  // swallowed — the manual Refresh + sync banner remain the fallback.
+  var AUTO_REFRESH_MS = 25000;
+  function pollBoard() {
+    if (view.mode !== "board" || authFailed) return;
+    refreshState().then(function () { if (view.mode === "board") renderBoard(); }).catch(function () { /* manual Refresh is the fallback */ });
+  }
+  function startAutoRefresh() {
+    if (typeof window === "undefined") return;
+    setInterval(pollBoard, AUTO_REFRESH_MS);
+    if (typeof document !== "undefined" && document.addEventListener) {
+      document.addEventListener("visibilitychange", function () { if (!document.hidden) pollBoard(); });
+    }
   }
 
   /** @param {any} b */
@@ -404,6 +479,7 @@
       if (reviewer && localStorage.getItem("calib:practiced")) renderBoard();
       else if (reviewer) renderPractice(0);
       else renderRoster();
+      if (!authFailed) startAutoRefresh();
     }).catch(function (e) {
       root.textContent = "";
       root.appendChild(el("div", "error", "Could not load calibration data: " + e.message));
