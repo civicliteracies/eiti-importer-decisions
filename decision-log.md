@@ -73,6 +73,19 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 ---
 
+### Should a state-owned enterprise reported in both roles carry one entity ID or two?
+<!-- scenario: trust-the-data; topic: pending-decisions -->
+
+**Situation:** A state-owned enterprise (SOE) appears in EITI data in two roles: as a **company** making payments (company-revenue / taxpayer rows) and as a **government entity** receiving revenue (government-revenue / recipient rows). The importer types each entity by the role of the column its name appears in, so the payment rows mint an `eiti_id_company` and the recipient rows mint an `eiti_id_gov_entity` for the same real-world organisation. Deduplication then runs *within* an entity-type lane — company via Splink+GLEIF, government and project via the LLM panel — so the two representations of one SOE are never joined. Example: ZCCM-IH (Zambia) resolves to a company entity from its taxpayer rows and a separate government entity from its recipient rows, under two different IDs.
+
+**Question:** Should one real-world SOE be represented by a single canonical entity that spans both roles, or by two role-scoped entities (one company, one government)? That is, is the entity grain the *organisation* or the *organisation-in-a-role*?
+
+**Status quo:** Two IDs, unlinked. The SOE list (`view_soeList`) is keyed on `eiti_id_company` and surfaces only the company-role representation, so within that table the split is invisible; it becomes visible only when a consumer joins company and government entities for the same organisation, where the SOE appears twice. No mechanism links the two IDs.
+
+**Technical detail:** entity_type is assigned upstream of dedup from the role of the source column, and the dedup lanes are separate pipelines keyed on entity_type (see the dedup epic, TASK-329). A resolution would either (a) introduce a cross-lane identity link — an SOE registry mapping the company ID to its government-role ID so consumers can fold them — or (b) affirm role-scoped identity as the intended grain and document that an SOE legitimately holds one ID per role. What would unblock the decision: agreement on whether the data model's entity is the organisation or the organisation-in-role, which depends on how downstream consumers (the SOE list and any company↔government joins) are expected to count SOEs. Until then, the two IDs coexist and no lane-level dedup lever can merge them, by construction.
+
+---
+
 ## 1. Data Quality Policy
 
 ### What kinds of errors can be fixed in the tool?
