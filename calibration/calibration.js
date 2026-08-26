@@ -22,7 +22,7 @@
    the API only.
 
    Testability: the fetch/CAS layer is exported via the module.exports guard (browser runs boot();
-   tests import ghGet/ghPut/withState/saveVerdict and stub global.fetch). */
+   tests import ghGet/ghPut/withState/saveVerdicts/makeVerdictWriter and stub global.fetch). */
 
 (function () {
   "use strict";
@@ -81,6 +81,13 @@
   }
   /** @param {number} ms @returns {Promise<void>} */
   function delay(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  // Exponential backoff with full jitter, so retries that lost the same race don't re-collide in
+  // lockstep on the next attempt. `attempt` is 0-based (0 = first retry).
+  /** @param {number} attempt @returns {number} */
+  function backoff(attempt) {
+    var ceiling = BACKOFF_MS * Math.pow(2, attempt);
+    return Math.round(Math.random() * ceiling);
+  }
 
   var authFailed = false;
   var syncFailed = false;
@@ -142,26 +149,96 @@
       if (next == null) return { ok: false, declined: true, state: state }; // mutator declined — no write
       return ghPut(STATE_PATH, next, sha).then(function () { return { ok: true, state: next }; });
     }).catch(function (e) {
-      if (C.isRetryable(e && e.kind) && tries > 0) return delay(BACKOFF_MS).then(function () { return withState(mutate, tries - 1); });
+      if (C.isRetryable(e && e.kind) && tries > 0) return delay(backoff(MAX_TRIES - tries)).then(function () { return withState(mutate, tries - 1); });
       throw e;
     });
   }
 
-  // A reviewer's verdict file, union-merged under CAS. Throws a typed error on final failure.
-  /** @param {string} bucketId @param {string} reviewer @param {string} itemId @param {string} verdict @param {number} [tries] @returns {Promise<any>} */
-  function saveVerdict(bucketId, reviewer, itemId, verdict, tries) {
+  // Merge a batch of {itemId: verdict} into a reviewer's verdict file, union-preserving prior
+  // decisions, under CAS. One commit per call regardless of batch size. Throws a typed error on
+  // final failure. The verdict writer (makeVerdictWriter) serializes calls so no two overlap on the
+  // same file — the CAS retry here only ever handles a genuine cross-device race.
+  /** @param {string} bucketId @param {string} reviewer @param {Record<string,string>} newDecisions @param {number} [tries] @returns {Promise<any>} */
+  function saveVerdicts(bucketId, reviewer, newDecisions, tries) {
     tries = tries == null ? MAX_TRIES : tries;
     var path = "verdicts/" + encodeURIComponent(bucketId) + "__" + encodeURIComponent(reviewer) + ".json";
     return ghGet(path).then(function (cur) {
       var decisions = cur ? (cur.json.decisions || {}) : {};
       decisions = C.unionVerdicts({}, decisions); // normalize (drop malformed cells)
-      decisions[itemId] = { verdict: verdict, timestamp: Date.now() };
+      var now = Date.now();
+      Object.keys(newDecisions).forEach(function (id) { decisions[id] = { verdict: newDecisions[id], timestamp: now }; });
       var payload = { reviewer: reviewer, bucket_id: bucketId, decisions: decisions };
       return ghPut(path, payload, cur ? cur.sha : undefined);
     }).catch(function (e) {
-      if (C.isRetryable(e && e.kind) && tries > 0) return delay(BACKOFF_MS).then(function () { return saveVerdict(bucketId, reviewer, itemId, verdict, tries - 1); });
+      if (C.isRetryable(e && e.kind) && tries > 0) return delay(backoff(MAX_TRIES - tries)).then(function () { return saveVerdicts(bucketId, reviewer, newDecisions, tries - 1); });
       throw e;
     });
+  }
+
+  // Coalescing serialized writer for verdict files. Rapid labels accumulate in `pending` and flush
+  // together (one commit per file), and every flush runs behind a single `chain` promise so two
+  // GET→PUT cycles can never overlap on the same file — the 409 sha-race is structurally impossible,
+  // not merely retried, and N labels collapse to a handful of commits (dodging the secondary rate
+  // limit). io.save persists one file's batch; io.onSaved / io.onFailed report which item ids landed
+  // or need re-labeling. Injected so the writer is unit-testable without the DOM.
+  /** @param {{save:(b:string,r:string,d:Record<string,string>)=>Promise<any>, onSaved?:(ids:string[])=>void, onFailed?:(ids:string[], err:any)=>void, isRetryable?:(err:any)=>boolean, debounceMs?:number, retryMs?:number}} io */
+  function makeVerdictWriter(io) {
+    var debounceMs = io.debounceMs == null ? 700 : io.debounceMs;
+    var retryMs = io.retryMs == null ? 3000 : io.retryMs; // spacing before an automatic re-flush after a retryable failure
+    /** @type {Record<string, {bucketId:string, reviewer:string, decisions:Record<string,string>}>} */
+    var pending = {};
+    /** @type {Promise<any>} */
+    var chain = Promise.resolve();
+    /** @type {any} */
+    var timer = null;
+    /** @param {string} bucketId @param {string} reviewer */
+    function keyFor(bucketId, reviewer) { return bucketId + " " + reviewer; }
+    /** @param {number} [ms] */
+    function schedule(ms) { if (timer == null) timer = setTimeout(function () { timer = null; flush(); }, ms == null ? debounceMs : ms); }
+    // Flush all pending files, one at a time, behind `chain`. Resolves when the drain completes. The
+    // leading `.catch` keeps the chain resolve-only forever, so a throw in any callback can never
+    // poison later flushes (which would otherwise silently kill the writer).
+    function flush() {
+      chain = chain.catch(function () {}).then(function () {
+        return Object.keys(pending).reduce(function (p, k) {
+          return p.then(function () {
+            var slot = pending[k];
+            if (!slot) return;
+            var decisions = slot.decisions; // narrowed local — survives capture into the closures below
+            /** @type {Record<string,string>} */
+            var batch = {};
+            Object.keys(decisions).forEach(function (id) { var v = decisions[id]; if (v != null) batch[id] = v; });
+            var ids = Object.keys(batch);
+            if (!ids.length) { delete pending[k]; return; }
+            return io.save(slot.bucketId, slot.reviewer, batch).then(function () {
+              // clear only the items we flushed whose verdict hasn't changed since the snapshot
+              ids.forEach(function (id) { if (decisions[id] === batch[id]) delete decisions[id]; });
+              if (!Object.keys(decisions).length) delete pending[k];
+              try { if (io.onSaved) io.onSaved(ids); } catch (e) { /* a callback throw must not poison the chain */ }
+            }, function (err) {
+              try { if (io.onFailed) io.onFailed(ids, err); } catch (e) { /* as above */ } // items stay in `pending`
+              // Only a retryable failure earns an automatic re-flush; a permanent one (AUTH/OTHER) would
+              // otherwise spin a forever request loop — and a 403 secondary-rate-limit maps to AUTH, so
+              // re-flushing it would sustain the very throttle we're avoiding. Items remain in `pending`
+              // regardless, so Export and the completion recheck still cover them.
+              if (!io.isRetryable || io.isRetryable(err)) schedule(retryMs + Math.round(Math.random() * retryMs));
+            });
+          });
+        }, Promise.resolve());
+      });
+      return chain;
+    }
+    return {
+      /** @param {string} bucketId @param {string} reviewer @param {string} itemId @param {string} verdict */
+      queue: function (bucketId, reviewer, itemId, verdict) {
+        var k = keyFor(bucketId, reviewer);
+        var slot = pending[k] || (pending[k] = { bucketId: bucketId, reviewer: reviewer, decisions: {} });
+        slot.decisions[itemId] = verdict;
+        schedule();
+      },
+      // Cancel the debounce and flush now; await the returned promise before treating a bucket as done.
+      flushNow: function () { if (timer != null) { clearTimeout(timer); timer = null; } return flush(); },
+    };
   }
 
   // ---- app state (in memory) --------------------------------------------------------------------
@@ -178,6 +255,21 @@
   function scaffoldsFor(bucket) { return bucket.item_ids.map(function (/** @type {string} */ id) { return ITEMS_BY_ID[id]; }).filter(Boolean); }
   function unsavedCount() { return Object.keys(view.unsaved).length; }
 
+  // The single verdict writer for this session: labels queue here and flush coalesced + serialized.
+  // onSaved clears the "unsaved" mark once a batch lands; onFailed marks its items unsaved + banners.
+  var verdictWriter = makeVerdictWriter({
+    save: saveVerdicts,
+    // A landed batch clears its items' unsaved marks and, once nothing is outstanding, the sticky
+    // syncFailed flag — otherwise the banner would keep crying "sync failed" after a recovered blip.
+    onSaved: function (ids) {
+      ids.forEach(function (id) { delete view.unsaved[id]; });
+      if (unsavedCount() === 0) syncFailed = false;
+      renderBanner();
+    },
+    onFailed: function (ids, err) { ids.forEach(function (id) { view.unsaved[id] = true; }); reportSyncFailure(err); },
+    isRetryable: function (err) { return C.isRetryable(err && err.kind); },
+  });
+
   // ---- rendering --------------------------------------------------------------------------------
   // Cast to non-null: in the browser boot() runs only with #app/#banner present; in tests boot() and
   // the render fns are never called (the module.exports branch exports the I/O layer only).
@@ -191,8 +283,8 @@
     } else if (syncFailed || unsavedCount() > 0) {
       var n = unsavedCount();
       bannerEl.textContent = n > 0
-        ? (n + " item" + (n === 1 ? "" : "s") + " didn't save — check your connection; re-label them or Export as a backup.")
-        : "A sync step failed — your last action may not be saved. Check your connection and try again.";
+        ? (n + " verdict" + (n === 1 ? "" : "s") + " haven't synced yet — they'll retry automatically. If it persists, Export as a backup.")
+        : "A sync step failed — your last action may not be saved yet; it will retry automatically.";
       bannerEl.className = "banner error";
     } else { bannerEl.textContent = ""; bannerEl.className = "banner"; }
   }
@@ -259,6 +351,7 @@
 
   function renderBoard() {
     view.mode = "board";
+    if (!authFailed) verdictWriter.flushNow(); // don't strand queued verdicts when leaving a bucket
     root.textContent = "";
     var now = Date.now();
     root.appendChild(el("h2", null, "Buckets — " + reviewer));
@@ -353,6 +446,9 @@
     setInterval(pollBoard, AUTO_REFRESH_MS);
     if (typeof document !== "undefined" && document.addEventListener) {
       document.addEventListener("visibilitychange", function () { if (!document.hidden) pollBoard(); });
+      // Best-effort: kick a flush as the tab is hidden/closed so buffered verdicts get one last chance
+      // to land before the in-flight fetch is torn down (the debounce window is otherwise up to ~700ms).
+      document.addEventListener("pagehide", function () { if (!authFailed) verdictWriter.flushNow(); });
     }
   }
 
@@ -377,10 +473,7 @@
     if (!it) return;
     view.localVerdicts[it.item_id] = v;
     delete view.unsaved[it.item_id];
-    if (!authFailed) {
-      saveVerdict(view.bucket.bucket_id, reviewer, it.item_id, v)
-        .catch(function (e) { view.unsaved[it.item_id] = true; reportSyncFailure(e); });
-    }
+    if (!authFailed) verdictWriter.queue(view.bucket.bucket_id, reviewer, it.item_id, v);
     view.idx += 1;
     renderLabel();
   }
@@ -391,28 +484,29 @@
     root.textContent = "";
     root.appendChild(button("← Back to buckets", function () { renderBoard(); }));
     if (view.idx >= items.length) {
-      if (unsavedCount() > 0) {
-        root.appendChild(el("div", "done", unsavedCount() + " item(s) didn't save. Re-open the bucket to retry, or Export as a backup — this bucket is NOT marked complete."));
-        return; // don't claim completion while verdicts are known-unsaved
-      }
       if (!authFailed) {
-        withState(function (s) {
-          var r = C.complete(s, view.bucket.bucket_id, reviewer, view.bucket.confirmations_required);
-          if (!r.ok) return null; // already at capacity via others — don't write
-          state = r.state; return r.state;
-        }).then(function (res) {
-          root.textContent = "";
-          root.appendChild(button("← Back to buckets", function () { renderBoard(); }));
-          root.appendChild(el("div", "done", res.declined
-            ? "This bucket was already completed by enough other reviewers while you were away — your answers are saved but it needed no more."
-            : "Bucket complete. Thank you! Pick another from the board."));
-        }).catch(function (e) {
-          reportSyncFailure(e);
-          root.appendChild(el("div", "done", "Your answers are saved, but marking the bucket complete failed — click Refresh on the board and it will reconcile."));
+        // Capture THIS bucket: the flush below can take seconds (its own retries), and the reviewer
+        // can click "Back" and open another bucket meanwhile — completion must target the bucket they
+        // actually finished, never wherever `view.bucket` has since roamed to.
+        var bucket = view.bucket;
+        view.mode = "completing"; // silences the keydown handler so no relabel slips into pending mid-flush
+        root.appendChild(el("div", "done", "Saving your verdicts…"));
+        verdictWriter.flushNow().then(function () {
+          var stillHere = view.bucket === bucket && view.mode === "completing";
+          var failed = scaffoldsFor(bucket).some(function (it) { return view.unsaved[it.item_id]; });
+          if (failed) {
+            if (stillHere) {
+              root.textContent = "";
+              root.appendChild(button("← Back to buckets", function () { renderBoard(); }));
+              root.appendChild(el("div", "done", "Some verdicts didn't save. Re-open the bucket to retry, or Export as a backup — this bucket is NOT marked complete."));
+            }
+            return; // don't claim completion while this bucket's verdicts are known-unsaved
+          }
+          markBucketComplete(bucket);
         });
-      } else {
-        root.appendChild(el("div", "done", "All items labeled locally. Use Export and send me the file."));
+        return;
       }
+      root.appendChild(el("div", "done", "All items labeled locally. Use Export and send me the file."));
       return;
     }
     var it = items[view.idx];
@@ -423,6 +517,30 @@
       onChoose: chooseAndAdvance,
       onNext: function () { view.idx += 1; renderLabel(); },
       onPrev: function () { view.idx = Math.max(0, view.idx - 1); renderLabel(); },
+    });
+  }
+
+  // Mark a specific finished bucket complete (all its verdicts confirmed landed). Takes the bucket
+  // explicitly — never reads view.bucket — because it runs after an async flush the reviewer may have
+  // navigated away from. DOM writes are guarded on the reviewer still viewing this completion screen,
+  // so a stale resolution can't paint over the bucket they moved on to.
+  /** @param {any} bucket */
+  function markBucketComplete(bucket) {
+    function onThisScreen() { return view.bucket === bucket && view.mode === "completing"; }
+    withState(function (s) {
+      var r = C.complete(s, bucket.bucket_id, reviewer, bucket.confirmations_required);
+      if (!r.ok) return null; // already at capacity via others — don't write
+      state = r.state; return r.state;
+    }).then(function (res) {
+      if (!onThisScreen()) return; // reviewer moved on — state is updated, but don't clobber their screen
+      root.textContent = "";
+      root.appendChild(button("← Back to buckets", function () { renderBoard(); }));
+      root.appendChild(el("div", "done", res.declined
+        ? "This bucket was already completed by enough other reviewers while you were away — your answers are saved but it needed no more."
+        : "Bucket complete. Thank you! Pick another from the board."));
+    }).catch(function (e) {
+      reportSyncFailure(e);
+      if (onThisScreen()) root.appendChild(el("div", "done", "Your answers are saved, but marking the bucket complete failed — click Refresh on the board and it will reconcile."));
     });
   }
 
@@ -487,7 +605,7 @@
     });
   }
 
-  var api = { ghGet: ghGet, ghPut: ghPut, withState: withState, saveVerdict: saveVerdict };
+  var api = { ghGet: ghGet, ghPut: ghPut, withState: withState, saveVerdicts: saveVerdicts, makeVerdictWriter: makeVerdictWriter };
   if (typeof module !== "undefined" && module.exports) module.exports = api; // tests import the I/O layer
   else boot(); // browser
 })();
