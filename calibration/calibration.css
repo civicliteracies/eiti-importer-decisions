@@ -38,8 +38,17 @@ select, .name-input {
 .save-indicator { font-size: 0.82rem; color: var(--fg-subtle); min-height: 1.1em; margin: 0 0 0.4rem;
   transition: color 150ms; }
 .save-indicator:empty { min-height: 0; margin: 0; }
-.save-indicator.saving::before { content: "◌ "; }
+/* A gently spinning glyph on the busy states (Saving… and Claiming… share the .saving class) so a
+   slow background write reads as working, not hung. Motion disabled below under reduced-motion. */
+.save-indicator.saving::before { content: "◌"; display: inline-block; margin-right: 0.35em;
+  animation: calib-spin 1.1s linear infinite; }
+@keyframes calib-spin { to { transform: rotate(360deg); } }
 .save-indicator.saved { color: #1e7d43; }
+
+/* Calm, non-blocking inline notice on the review screen (e.g. a full-bucket claim race) —
+   informational, never an error. */
+.notice { color: var(--fg); background: var(--accent-soft); border: 1px solid var(--rule);
+  border-radius: 8px; padding: 0.55rem 0.85rem; margin: 0 0 1rem; font-size: 0.9rem; }
 
 /* review card + shared widget classes */
 .card { background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 14px;
@@ -77,6 +86,7 @@ select, .name-input {
 @keyframes calib-indet { from { margin-left: -40%; } to { margin-left: 100%; } }
 @media (prefers-reduced-motion: reduce) {
   .progress.indeterminate .bar { animation: none; width: 100%; opacity: 0.5; }
+  .save-indicator.saving::before { animation: none; }
 }
 .error { color: var(--pending); padding: 1rem 0; }
 .practice-note { background: var(--accent-soft); border: 1px solid var(--rule); border-radius: 10px;

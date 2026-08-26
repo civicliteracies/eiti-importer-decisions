@@ -100,12 +100,17 @@
 
   var authFailed = false;
   var syncFailed = false;
+  // A token death (401/403) — the one failure class that flips the page read-only. markAuthFailed alone
+  // only repaints the banner; callers that could be mid-write must follow it with recomputeMode() to
+  // actually re-derive `mode` and bounce off any writing screen.
+  /** @param {any} e @returns {boolean} */
+  function isAuthError(e) { return !!(e && e.kind === "AUTH"); }
   function markAuthFailed() { authFailed = true; renderBanner(); }
 
   // Classify + surface a sync failure WITHOUT disabling writes (unless it's a genuine AUTH failure).
   /** @param {any} err */
   function reportSyncFailure(err) {
-    if (err && err.kind === "AUTH") { markAuthFailed(); return; }
+    if (isAuthError(err)) { markAuthFailed(); return; }
     syncFailed = true;
     if (typeof console !== "undefined") console.error("calibration sync failure:", err);
     renderBanner();
@@ -201,7 +206,7 @@
     /** @type {any} */
     var timer = null;
     /** @param {string} bucketId @param {string} reviewer */
-    function keyFor(bucketId, reviewer) { return bucketId + " " + reviewer; }
+    function keyFor(bucketId, reviewer) { return bucketId + "__" + reviewer; }
     /** @param {number} [ms] */
     function schedule(ms) { if (timer == null) timer = setTimeout(function () { timer = null; flush(); }, ms == null ? debounceMs : ms); }
     // Flush all pending files, one at a time, behind `chain`. Resolves when the drain completes. The
@@ -257,8 +262,8 @@
   /** @type {Record<string, any>} */ var ITEMS_BY_ID = {};
   var state = C ? C.emptyState() : { roster: [], buckets: {} };
   var reviewer = LS ? (LS.getItem("calib:reviewer") || "") : "";
-  /** @type {{mode:string, bucket:any, idx:number, localVerdicts:Record<string,string>, unsaved:Record<string,boolean>}} */
-  var view = { mode: "loading", bucket: null, idx: 0, localVerdicts: {}, unsaved: {} };
+  /** @type {{mode:string, bucket:any, idx:number, localVerdicts:Record<string,string>, unsaved:Record<string,boolean>, notice:string|null}} */
+  var view = { mode: "loading", bucket: null, idx: 0, localVerdicts: {}, unsaved: {}, notice: null };
 
   /** @param {any} bucket @returns {any[]} */
   function scaffoldsFor(bucket) { return bucket.item_ids.map(function (/** @type {string} */ id) { return ITEMS_BY_ID[id]; }).filter(Boolean); }
@@ -277,7 +282,7 @@
     },
     onFailed: function (ids, err) {
       ids.forEach(function (id) { view.unsaved[id] = true; });
-      saveState = "idle"; renderSaveIndicator(); // clear the calm "Saving…" — the amber banner owns the failure now
+      verdictSaving = false; showSaved = false; renderSaveIndicator(); // clear the calm "Saving…" — the amber banner owns the failure now
       reportSyncFailure(err);
     },
     isRetryable: function (err) { return C.isRetryable(err && err.kind); },
@@ -378,7 +383,7 @@
       function () { presenceWriting = false; recomputeMode(); },
       // On genuine failure, adopt read-only if the token died; otherwise leave it for the next natural
       // trigger (poll/visibility) — do NOT re-derive-and-rewrite here, which would spin on a persistent error.
-      function (err) { presenceWriting = false; if (err && err.kind === "AUTH") { markAuthFailed(); recomputeMode(); } });
+      function (err) { presenceWriting = false; if (isAuthError(err)) { markAuthFailed(); recomputeMode(); } });
   }
 
   // Re-derive mode from (lockState, presence, auth), execute any due presence write, and re-render on
@@ -391,7 +396,7 @@
     if (plan.write !== "none") writePresence();
     renderBanner();
     if (mode === was) return;
-    if (mode !== "active" && (view.mode === "label" || view.mode === "claiming" || view.mode === "completing")) {
+    if (mode !== "active" && (view.mode === "label" || view.mode === "completing")) {
       // Demoted on a writing screen (a take-over landed): drain accepted verdicts (flushNow is never
       // gated), then drop to the now-read-only board rather than silently keep a writing UI up.
       verdictWriter.flushNow();
@@ -411,29 +416,48 @@
   var root = /** @type {HTMLElement} */ (typeof document !== "undefined" ? document.getElementById("app") : null);
   var bannerEl = /** @type {HTMLElement} */ (typeof document !== "undefined" ? document.getElementById("banner") : null);
 
-  // A calm, positive save indicator for NORMAL batching — distinct from the amber failure banner.
-  // "Saving…" while a batch is in flight, a brief "✓ Saved" when it lands, then quiet. Genuine
-  // failures still go to the banner; this never shows an error.
+  // A calm, positive activity indicator for NORMAL background writes — distinct from the amber failure
+  // banner. Two independent sources feed it so a background slot-claim (optimistic open) and a verdict
+  // batch can be in flight at once without clobbering each other's text: `verdictSaving` tracks a
+  // verdict flush, `claimingCount` the open-claims. Display priority Saving… > Claiming… > ✓ Saved —
+  // the reviewer's own data save wins the label; a claim that lands just goes quiet (no tick). Both
+  // busy states use the `saving` class so the animated glyph applies to each. Never shows an error.
   var saveIndicatorEl = /** @type {HTMLElement} */ (typeof document !== "undefined" ? document.getElementById("save-indicator") : null);
-  /** @type {"idle"|"saving"|"saved"} */
-  var saveState = "idle";
+  var verdictSaving = false; // a verdict batch is in flight
+  var claimingCount = 0;     // background slot-claims in flight (optimistic open)
+  var showSaved = false;     // transient "✓ Saved" tick after a verdict batch lands
   /** @type {any} */ var savedTimer = null;
+  // Collapse the three independent sources into ONE display state (exactly one is shown), so the
+  // precedence lives in a single place instead of being hand-encoded in both the class and the text.
+  /** @returns {"saving"|"claiming"|"saved"|"idle"} */
+  function saveIndicatorState() {
+    if (verdictSaving) return "saving";     // the reviewer's own data save wins the label
+    if (claimingCount > 0) return "claiming";
+    if (showSaved) return "saved";
+    return "idle";
+  }
   function renderSaveIndicator() {
     if (!saveIndicatorEl) return;
-    saveIndicatorEl.className = "save-indicator " + saveState;
-    saveIndicatorEl.textContent = saveState === "saving" ? "Saving…" : saveState === "saved" ? "✓ Saved" : "";
+    var s = saveIndicatorState();
+    // "claiming" reuses the animated `saving` class (same glyph); the label distinguishes the two.
+    saveIndicatorEl.className = "save-indicator " + (s === "claiming" ? "saving" : s);
+    saveIndicatorEl.textContent = s === "saving" ? "Saving…" : s === "claiming" ? "Claiming…" : s === "saved" ? "✓ Saved" : "";
   }
   function markSaving() {
     if (savedTimer) { clearTimeout(savedTimer); savedTimer = null; }
-    if (saveState !== "saving") { saveState = "saving"; renderSaveIndicator(); }
+    showSaved = false;
+    if (!verdictSaving) { verdictSaving = true; renderSaveIndicator(); }
   }
   function markSaved() {
-    saveState = "saved"; renderSaveIndicator();
+    verdictSaving = false; showSaved = true; renderSaveIndicator();
     if (savedTimer) clearTimeout(savedTimer);
-    savedTimer = setTimeout(function () { saveState = "idle"; renderSaveIndicator(); }, 1500);
+    savedTimer = setTimeout(function () { showSaved = false; renderSaveIndicator(); }, 1500);
   }
+  function beginClaiming() { claimingCount += 1; renderSaveIndicator(); }
+  function endClaiming() { claimingCount = Math.max(0, claimingCount - 1); renderSaveIndicator(); }
 
   /** @type {string|null} */ var lastBannerSig = null;
+  var noticeAnnounced = false; // announce the full-bucket-race notice once (see renderLabel), not on every item advance
   function renderBanner() {
     if (!bannerEl) return;
     var text, cls, takeover = false;
@@ -664,28 +688,49 @@
     return C.refreshSession(r.state, rev, sid, now);
   }
 
+  var openGeneration = 0; // a later openBucket supersedes an earlier in-flight one (the reviewer went Back + re-opened)
   /** @param {any} b */
   function openBucket(b) {
     if (!isActive()) { renderBoard(); return; } // auth/passive/electing can't claim — the board is the path forward
-    // Immediate feedback: the claim is a state.json CAS that can take a moment under contention, so the
-    // click must never read as "nothing happened".
-    view.mode = "claiming";
-    root.textContent = "";
-    root.appendChild(status("Claiming " + b.bucket_id + "…"));
+    // Optimistic: opening a bucket is navigation, not a sync step. Show the review screen immediately;
+    // the slot claim is a soft reservation that runs in the background (surfaced by the calm "Claiming…"
+    // indicator). Verdicts save through their own writer regardless of the claim, and the completion cap
+    // (C.complete) — not the claim — is what keeps surplus confirmations out of the analysis, so a slow
+    // or failed claim never costs the reviewer their place.
+    var gen = ++openGeneration; // the "← Back to buckets" button is live during the claim, so a second open can race this one
+    view.bucket = b; view.idx = 0; view.notice = null; noticeAnnounced = false;
+    renderLabel();
+    beginClaiming();
     withState(function (s) {
       var next = claimWithPresence(s, b, reviewer, SESSION_ID, Date.now());
-      if (next != null) state = next;
-      return next; // null → declined (full bucket, or a foreign session took over); withState writes nothing
+      if (next != null) state = next; // adopt fresh-fetched state on a successful claim
+      return next; // null → declined (full bucket, or a live foreign session holds the name)
     }).then(function (res) {
-      if (res.declined) {
-        state = res.state; recomputeMode(); // adopt the fresh state — it may reveal we were taken over
-        if (isActive()) alert("This bucket is full — someone else took the last slot. Pick another.");
-        renderBoard(); // if demoted, the passive banner explains; either way the board reflects fresh state
-        return;
+      if (gen !== openGeneration) return; // a newer open supersedes this: its stale state/notice must not land
+      if (res.declined) state = res.state; // adopt the fresh state even when declined — it may reveal we were taken over
+      recomputeMode();                      // demotes to the read-only board if a take-over landed
+      // Still active after a decline ⇒ the cause was a FULL bucket, not a take-over. Split/disposition
+      // buckets need only one reviewer, so two reviewers opening the same one is an ordinary race. Keep
+      // the reviewer on the screen (no bounce), but tell them their answers here may not be needed.
+      if (res.declined && isActive() && view.bucket === b && view.mode === "label") {
+        view.notice = "Someone else is already reviewing this bucket — your answers here may not be needed. Pick another from the board when you're ready.";
+        renderLabel();
       }
-      recomputeMode();
-      view.bucket = b; view.idx = 0; renderLabel();
-    }).catch(function (e) { reportSyncFailure(e); renderBoard(); });
+    }, function (e) {
+      if (gen !== openGeneration) return; // stale failure of a superseded open
+      // A failed claim is NOT a verdict-sync failure: nothing is unsaved and nothing retries a claim, so
+      // the amber verdict banner would be a lie. A genuine AUTH failure, though, must flip the page
+      // read-only — markAuthFailed alone only repaints the banner; recomputeMode re-derives `mode`
+      // (→ read-only) and bounces off the writing screen (mirrors writePresence).
+      if (isAuthError(e)) { markAuthFailed(); recomputeMode(); }
+      else if (typeof console !== "undefined") console.warn("calibration: bucket claim did not land (labeling continues):", e);
+    }).catch(function (err) {
+      // A resolution handler itself threw (a render bug) — surface it; two-arg then above means this
+      // catch never sees the claim's own rejection, so it can't masquerade as a claim failure.
+      if (typeof console !== "undefined") console.error("calibration: openBucket handler error:", err);
+    }).finally(function () {
+      endClaiming(); // exactly once per beginClaiming, whichever branch ran or threw
+    });
   }
 
   // One place both the click and the keydown paths commit a verdict + advance.
@@ -742,6 +787,14 @@
       renderBoard(); // reached only if demoted right at the end of a bucket — go back to the read-only board
       return;
     }
+    if (view.notice) {
+      // renderLabel rebuilds #app on every item advance, so announce the notice ONCE (role=status ⇒
+      // aria-live=polite on the render right after the decline) — re-adding role each rebuild would
+      // re-read it aloud on every item. Same one-shot discipline as renderBanner's lastBannerSig.
+      var noticeEl = el("div", "notice", view.notice); // calm, non-blocking (e.g. a full-bucket claim race)
+      if (!noticeAnnounced) { noticeEl.setAttribute("role", "status"); noticeAnnounced = true; }
+      root.appendChild(noticeEl);
+    }
     var it = items[view.idx];
     var main = el("div", null); root.appendChild(main);
     // scored items are BLIND — reveal:false, no machine answer shown, ever.
@@ -796,7 +849,8 @@
   /** @param {string} label @param {(this:GlobalEventHandlers, ev:MouseEvent)=>any} onclick @returns {HTMLButtonElement} */
   function button(label, onclick) { var b = document.createElement("button"); b.textContent = label; b.onclick = onclick; return b; }
   // A transient status message that assistive tech announces (role=status ⇒ implicit aria-live=polite).
-  // Used for Claiming…/Saving…/Bucket-complete, which are painted into #app (not a live region).
+  // Used for the completion flush ("Saving your verdicts…") and bucket-complete messages, painted into
+  // #app (not a live region).
   /** @param {string} text @returns {HTMLElement} */
   function status(text) { var e = el("div", "done", text); e.setAttribute("role", "status"); return e; }
 
