@@ -27,6 +27,19 @@ select, .name-input {
 .banner { color: var(--fg-muted); font-size: 0.85rem; min-height: 0; margin-bottom: 0.5rem; }
 .banner.error { color: var(--pending); font-weight: 600; background: var(--pending-bg);
   border: 1px solid var(--pending-rule); border-radius: 8px; padding: 0.6rem 0.9rem; }
+/* Read-only-because-another-session-is-active: informational, not a failure — calm accent, not amber.
+   Lays the explanation and the "Make this the active session" action out on one row (wraps if narrow). */
+.banner.warn { color: var(--fg); font-weight: 500; background: var(--accent-soft);
+  border: 1px solid var(--rule); border-radius: 8px; padding: 0.6rem 0.9rem;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.75rem; }
+.banner-action { margin: 0; font-size: 0.82rem; padding: 0.35rem 0.75rem; flex: none; }
+
+/* Calm positive save indicator for normal batching (never an error). Collapses to nothing when idle. */
+.save-indicator { font-size: 0.82rem; color: var(--fg-subtle); min-height: 1.1em; margin: 0 0 0.4rem;
+  transition: color 150ms; }
+.save-indicator:empty { min-height: 0; margin: 0; }
+.save-indicator.saving::before { content: "◌ "; }
+.save-indicator.saved { color: #1e7d43; }
 
 /* review card + shared widget classes */
 .card { background: var(--bg-elevated); border: 1px solid var(--rule); border-radius: 14px;
@@ -55,6 +68,16 @@ select, .name-input {
 .nav > :first-child { justify-self: start; }
 .nav > :last-child { justify-self: end; }
 .done { text-align: center; color: var(--fg-muted); padding: 3rem 0; font-size: 1rem; }
+/* Indeterminate progress for the completion flush — a network round-trip of unknown length, so the
+   bar sweeps rather than lying with a percentage. */
+.progress { height: 4px; max-width: 18rem; margin: 1rem auto 0; background: var(--bg-soft);
+  border-radius: 999px; overflow: hidden; }
+.progress.indeterminate .bar { height: 100%; width: 40%; background: var(--accent); border-radius: 999px;
+  animation: calib-indet 1.1s ease-in-out infinite; }
+@keyframes calib-indet { from { margin-left: -40%; } to { margin-left: 100%; } }
+@media (prefers-reduced-motion: reduce) {
+  .progress.indeterminate .bar { animation: none; width: 100%; opacity: 0.5; }
+}
 .error { color: var(--pending); padding: 1rem 0; }
 .practice-note { background: var(--accent-soft); border: 1px solid var(--rule); border-radius: 10px;
   padding: 0.65rem 0.9rem; margin-bottom: 1rem; font-size: 0.9rem; color: var(--fg-muted); }

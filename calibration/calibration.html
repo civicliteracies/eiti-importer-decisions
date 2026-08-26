@@ -30,6 +30,9 @@
 
   <main id="content" class="wrap">
     <div id="banner" class="banner" role="status"></div>
+    <!-- Calm visual save chrome only — NOT a live region (per-keystroke "Saving…/✓ Saved" would spam a
+         screen reader). Genuine failures are announced via #banner's role=status. -->
+    <div id="save-indicator" class="save-indicator" aria-hidden="true"></div>
     <div id="app"></div>
   </main>
 

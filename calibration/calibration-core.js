@@ -6,7 +6,14 @@
 
    state.json shape:
      { "roster": ["ana", ...],
-       "buckets": { "<bucket_id>": { "claimants": [{"name","ts"}], "completed_by": ["ana", ...] } } }
+       "buckets": { "<bucket_id>": { "claimants": [{"name","ts"}], "completed_by": ["ana", ...] } },
+       "sessions": { "<reviewer>": { "sessionId": "…", "ts": 0 } } }   // the designated active session per name
+
+   The `sessions` map is the cross-browser single-active-session marker: a capacity-1 claim-lease keyed
+   by sessionId with a short staleness horizon (SESSION_TTL_MS). It is refreshed lazily and NEVER
+   auto-claimed over a live holder — transfer happens only via takeoverSession (the one-click take-over)
+   or after the holder goes stale. deriveMode/planPresence turn (lock state, presence, auth) into the
+   shell's read-only `mode`. All reducers stay pure; the shell (calibration.js) does the I/O + Web Locks.
 
    Laws (asserted in tests/js/calibration-coord.test.js):
      - registerName rejects a duplicate name (identity is the structural key for verdicts + H).
@@ -18,7 +25,8 @@
 /**
  * @typedef {{ name: string, ts: number }} Claimant
  * @typedef {{ claimants: Claimant[], completed_by: string[] }} BucketState
- * @typedef {{ roster: string[], buckets: Record<string, BucketState> }} CoordState
+ * @typedef {{ sessionId: string, ts: number }} SessionRec
+ * @typedef {{ roster: string[], buckets: Record<string, BucketState>, sessions?: Record<string, SessionRec> }} CoordState
  * @typedef {{ verdict: string, timestamp: number }} VerdictCell
  * @typedef {{ ok: boolean, reason?: string, state: CoordState }} CoordResult
  */
@@ -310,8 +318,188 @@
     return acc;
   }
 
+  // ---- single-active-session presence (a capacity-1 claim-lease keyed by sessionId) ----------------
+  // The cross-browser "who is the designated active writer for this name" record. Lazy: refreshed
+  // only on activity, and NEVER auto-claimed by a non-holder — a live holder is displaced only by an
+  // explicit takeoverSession (the one-click take-over) or after it goes stale (which only changes
+  // messaging, never auto-transfers). Staleness is a shorter horizon than a bucket claim's TTL.
+  var SESSION_TTL_MS = 5 * 60 * 1000;
+
+  /**
+   * Prototype-safe read of the name-keyed sessions map — a reviewer name of "__proto__"/"constructor"
+   * would otherwise resolve up the prototype chain (the same hazard _bucket guards).
+   * @param {CoordState} state
+   * @param {string} name
+   * @returns {SessionRec|undefined}
+   */
+  function _session(state, name) {
+    var m = state.sessions;
+    return (m && Object.prototype.hasOwnProperty.call(m, name)) ? m[name] : undefined;
+  }
+
+  /**
+   * Store `rec` under a name-key as a plain own property. A bracket assignment `m[name] = rec` with
+   * name "__proto__" invokes the prototype SETTER (stores nothing); defineProperty writes an ordinary
+   * enumerable own property that JSON round-trips normally — so a reviewer named "__proto__" is data,
+   * not a pollution vector.
+   * @param {Record<string, SessionRec>} m
+   * @param {string} name
+   * @param {SessionRec} rec
+   */
+  function _setSession(m, name, rec) {
+    Object.defineProperty(m, name, { value: rec, enumerable: true, writable: true, configurable: true });
+  }
+
+  /**
+   * The sessionId currently designated active for `name`, or null when none is set or it has gone
+   * stale. Reading is non-destructive — a stale record is simply not returned, never rewritten.
+   * @param {CoordState} state
+   * @param {string} name
+   * @param {number} now
+   * @param {number} [ttlMs]
+   * @returns {string|null}
+   */
+  function activeSession(state, name, now, ttlMs) {
+    ttlMs = ttlMs ?? SESSION_TTL_MS;
+    var rec = _session(state, name);
+    if (!rec || typeof rec.sessionId !== "string") return null;
+    return (now - rec.ts) < ttlMs ? rec.sessionId : null;
+  }
+
+  /**
+   * True when a DIFFERENT, non-stale session holds the active-session slot for `name` — i.e. writing
+   * as `sessionId` would step on a live peer. The single source for the "decline this write" decision
+   * shared by the presence refresh and the compound claim/complete writes.
+   * @param {CoordState} state
+   * @param {string} name
+   * @param {string} sessionId
+   * @param {number} now
+   * @param {number} [ttlMs]
+   * @returns {boolean}
+   */
+  function sessionHeldByOther(state, name, sessionId, now, ttlMs) {
+    var active = activeSession(state, name, now, ttlMs);
+    return active != null && active !== sessionId;
+  }
+
+  /**
+   * Claim or refresh the single active-session slot for `name` as `sessionId`. Succeeds when the slot
+   * is empty, already ours (idempotent ts refresh), or held by a stale session; REFUSED (ok:false,
+   * state unchanged in content) when a DIFFERENT non-stale session holds it. Never steals a live
+   * holder — that is takeoverSession's job.
+   * @param {CoordState} state
+   * @param {string} name
+   * @param {string} sessionId
+   * @param {number} now
+   * @param {number} [ttlMs]
+   * @returns {CoordResult}
+   */
+  function claimSession(state, name, sessionId, now, ttlMs) {
+    ttlMs = ttlMs ?? SESSION_TTL_MS;
+    var s = _clone(state);
+    if (!s.sessions) s.sessions = {};
+    var cur = _session(s, name);
+    if (cur && cur.sessionId !== sessionId && (now - cur.ts) < ttlMs) {
+      return { ok: false, reason: "held by another session", state: s };
+    }
+    _setSession(s.sessions, name, { sessionId: sessionId, ts: now });
+    return { ok: true, state: s };
+  }
+
+  /**
+   * Force the active-session slot to `sessionId` regardless of a live holder — the explicit
+   * cross-browser take-over. The displaced session learns it lost on its next activeSession read.
+   * @param {CoordState} state
+   * @param {string} name
+   * @param {string} sessionId
+   * @param {number} now
+   * @returns {CoordResult}
+   */
+  function takeoverSession(state, name, sessionId, now) {
+    var s = _clone(state);
+    if (!s.sessions) s.sessions = {};
+    _setSession(s.sessions, name, { sessionId: sessionId, ts: now });
+    return { ok: true, state: s };
+  }
+
+  /**
+   * Compose a presence-ts bump into another reducer's output, to piggyback presence on the
+   * claim/complete write. Bumps iff we may hold the slot (empty/ours/stale); a NO-OP over a live
+   * foreign holder, so a piggybacked write can never resurrect us over a peer.
+   * @param {CoordState} state
+   * @param {string} name
+   * @param {string} sessionId
+   * @param {number} now
+   * @param {number} [ttlMs]
+   * @returns {CoordState}
+   */
+  function refreshSession(state, name, sessionId, now, ttlMs) {
+    var r = claimSession(state, name, sessionId, now, ttlMs);
+    return r.ok ? r.state : state;
+  }
+
+  /**
+   * The reviewer's session mode, from three independent inputs. Precedence: a token/auth failure
+   * dominates (read-only regardless); then the intra-browser Web Lock (another tab here holds it, or
+   * we don't yet know our lock state); then cross-browser presence (another browser/device is the
+   * designated active session). "active" is the only writable mode.
+   * @param {"held"|"waiting"|"electing"|"unsupported"} lockState
+   * @param {string|null} activeSessionId - the fresh presence holder (activeSession), or null
+   * @param {string} mySessionId
+   * @param {boolean} authFailed
+   * @returns {"active"|"electing"|"passive-tab"|"passive-session"|"auth"}
+   */
+  function deriveMode(lockState, activeSessionId, mySessionId, authFailed) {
+    if (authFailed) return "auth";
+    if (lockState === "electing") return "electing";
+    if (lockState === "waiting") return "passive-tab"; // another tab in THIS browser holds the lock
+    // held | unsupported → we are this browser's writer candidate; cross-browser presence decides
+    if (activeSessionId && activeSessionId !== mySessionId) return "passive-session";
+    return "active";
+  }
+
+  /**
+   * Whether an active session should refresh its presence ts now: true once older than half the TTL,
+   * so a continuously-labeling holder re-marks itself well before a peer could observe it as stale,
+   * while an idle session writes nothing.
+   * @param {number} myTs
+   * @param {number} now
+   * @param {number} [ttlMs]
+   * @returns {boolean}
+   */
+  function presenceRefreshDue(myTs, now, ttlMs) {
+    ttlMs = ttlMs ?? SESSION_TTL_MS;
+    return (now - myTs) > (ttlMs / 2);
+  }
+
+  /**
+   * The whole presence-loop decision, pure: from the observed state decide the session `mode` and
+   * whether a presence write is due (`claim` a free/stale slot, `refresh` our own aging slot, or
+   * `none`). It NEVER asks to write over a live foreign holder — `write` is non-`none` only when the
+   * derived mode is "active", i.e. no fresh foreign session exists. The shell executes the returned
+   * action; a raced write is a safe no-op (claimSession/refreshSession decline a live foreign holder).
+   * @param {"held"|"waiting"|"electing"|"unsupported"} lockState
+   * @param {CoordState} state
+   * @param {string} reviewer
+   * @param {string} mySessionId
+   * @param {boolean} authFailed
+   * @param {number} now
+   * @param {number} [ttlMs]
+   * @returns {{ mode: "active"|"electing"|"passive-tab"|"passive-session"|"auth", write: "claim"|"refresh"|"none" }}
+   */
+  function planPresence(lockState, state, reviewer, mySessionId, authFailed, now, ttlMs) {
+    var active = activeSession(state, reviewer, now, ttlMs);
+    var mode = deriveMode(lockState, active, mySessionId, authFailed);
+    if (mode !== "active") return { mode: mode, write: "none" };
+    var rec = _session(state, reviewer);
+    if (!rec || rec.sessionId !== mySessionId) return { mode: mode, write: "claim" };   // free or stale → take it
+    if (presenceRefreshDue(rec.ts, now, ttlMs)) return { mode: mode, write: "refresh" }; // ours but aging
+    return { mode: mode, write: "none" };
+  }
+
   var api = {
     DEFAULT_TTL_MS: DEFAULT_TTL_MS,
+    SESSION_TTL_MS: SESSION_TTL_MS,
     emptyState: emptyState,
     activeClaimants: activeClaimants,
     holders: holders,
@@ -325,6 +513,14 @@
     unionVerdicts: unionVerdicts,
     classifyError: classifyError,
     isRetryable: isRetryable,
+    activeSession: activeSession,
+    sessionHeldByOther: sessionHeldByOther,
+    claimSession: claimSession,
+    takeoverSession: takeoverSession,
+    refreshSession: refreshSession,
+    deriveMode: deriveMode,
+    presenceRefreshDue: presenceRefreshDue,
+    planPresence: planPresence,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibrationCoord = api;
