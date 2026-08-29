@@ -1,23 +1,23 @@
 {
-  "entity_type": "gov_entity",
-  "seed": 20260821,
-  "created_epoch": 1787559077,
+  "entity_type": "project",
+  "seed": 20260830,
+  "created_epoch": 1788043412,
   "strata": {
     "merge": {
-      "population": 249,
-      "sampled": 249,
+      "population": 72,
+      "sampled": 72,
       "design": "census",
-      "confirmations_required": 2
+      "confirmations_required": 1
     },
     "split": {
-      "population": 12223,
+      "population": 28302,
       "sampled": 50,
       "design": "spot-check n=50",
       "confirmations_required": 1
     },
     "disposition": {
-      "population": 1131,
-      "sampled": 288,
+      "population": 566,
+      "sampled": 230,
       "design": "±5% CI",
       "confirmations_required": 1
     }
