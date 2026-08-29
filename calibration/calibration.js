@@ -13,6 +13,15 @@
    the page to read-only; any other failure raises a distinct "not saved" banner WITHOUT disabling
    writes, and a save/complete is never reported as successful unless its write actually landed.
 
+   Eventual consistency: the Contents API is NOT read-after-write consistent — a GET right after a
+   PUT can return the previous sha for seconds. So (a) every GET is `cache: "no-store"` (a cached
+   max-age=60 GET, un-invalidated by a 409'd PUT, is what let a stale sha 409-storm forever); (b) each
+   coordination file is a single in-tab writer, serialized — verdict files thread their sha+decisions
+   forward from each PUT response and never re-GET on the hot path (so their self-409 is eliminated,
+   not merely retried), and state.json writes queue on one chain so the client never races its own
+   CONCURRENT writes. A residual state.json 409 from replica lag is still possible and is healed by
+   the CAS retry — as is any genuine cross-device race.
+
    Single active session: because identity is a self-asserted name that any number of tabs/devices can
    resume, two tiers keep exactly one writer. Within a browser, navigator.locks elects one active tab
    (the others go read-only, promoted automatically when the holder closes). Across browsers/devices —
@@ -117,10 +126,14 @@
   }
 
   // GET a file → {json, sha} or null (404). Throws a typed error otherwise.
+  // `cache: "no-store"`: GitHub's API responses carry `Cache-Control: private, max-age=60`, and a
+  // 409'd PUT does NOT invalidate a cached GET (HTTP invalidation applies to non-error responses).
+  // Without no-store the browser would re-serve a stale sha from its own cache for up to a minute —
+  // so a CAS retry re-reads the SAME stale sha and 409s forever. Every read must reach GitHub.
   /** @param {string} path @returns {Promise<{json:any, sha:string}|null>} */
   function ghGet(path) {
     /** @type {any} */
-    var opts = { headers: { Authorization: "Bearer " + TOKEN, Accept: "application/vnd.github+json" } };
+    var opts = { cache: "no-store", headers: { Authorization: "Bearer " + TOKEN, Accept: "application/vnd.github+json" } };
     var sig = timeoutSignal(); if (sig) opts.signal = sig;
     return fetch(API + path, opts).catch(function (e) {
       throw makeErr("RETRYABLE", 0, "network: " + (e && e.message)); // fetch reject (network/DNS/abort)
@@ -147,61 +160,118 @@
       throw makeErr("RETRYABLE", 0, "network: " + (e && e.message));
     }).then(function (r) {
       if (!r.ok) throw makeErr(C.classifyError(r.status), r.status, "PUT " + path + " → " + r.status);
-      return r.json().then(function (j) { return { sha: j.content.sha }; });
+      return r.json().then(function (j) {
+        // The returned sha is threaded forward as the next write's CAS token; if a malformed response
+        // ever lacked it, `sha` would be undefined → ghPut's `if (sha)` treats it as a create and
+        // silently drops CAS. Refuse it (OTHER = surface, don't retry-loop) rather than write blind.
+        var sha = j && j.content && j.content.sha;
+        if (typeof sha !== "string" || !sha) throw makeErr("OTHER", r.status, "PUT " + path + ": response had no content.sha");
+        return { sha: sha };
+      });
     });
   }
 
   // Read-modify-write state.json under CAS. mutate(state) → newState, or null to DECLINE (no write).
   // Resolves { ok, declined?, state }; retries CAS/RETRYABLE with backoff; throws typed error otherwise.
+  //
+  // All state.json access is serialized through `stateChain`: the client is a SINGLE in-tab writer, so
+  // its own concurrent operations (open-claim, presence refresh, completion, take-over) never race
+  // each other into a self-inflicted CAS collision. Unlike the verdict file, state.json is NOT
+  // sha-threaded — each op re-GETs fresh state per attempt (so the atomic take-over gate, a loser
+  // refetching and declining, still holds). Serialization removes the concurrent-collision storm; a
+  // RESIDUAL 409 from server-side replica lag (read-after-write) is still possible and is healed by
+  // the CAS retry below, not by serialization. Freshness reads (refreshState/poll) queue here too and
+  // simply observe — a benign head-of-line wait behind an in-flight write's retries.
+  /** @type {Promise<unknown>} */
+  var stateChain = Promise.resolve();
+  // Run `attempt`, retrying a CAS/RETRYABLE failure with jittered backoff up to `tries` times; a
+  // permanent failure (AUTH/OTHER) throws immediately. `onRetry(err)` runs before each re-attempt so a
+  // caller can invalidate stale state (e.g. drop a threaded sha on a genuine 409). Single-sources the
+  // isRetryable + MAX_TRIES + backoff policy shared by withState and saveVerdicts. Each retry re-invokes
+  // `attempt` from scratch (re-GET → re-mutate/re-union → re-PUT) — never a replayed precomputed
+  // payload, which is what lets a CAS loser observe an interleaved write and decline.
+  /** @template T @param {() => Promise<T>} attempt @param {number} tries @param {(err:any)=>void} [onRetry] @returns {Promise<T>} */
+  function retryWithBackoff(attempt, tries, onRetry) {
+    return attempt().catch(function (e) {
+      if (!C.isRetryable(e && e.kind) || tries <= 0) throw e;
+      if (onRetry) onRetry(e);
+      return delay(backoff(MAX_TRIES - tries)).then(function () { return retryWithBackoff(attempt, tries - 1, onRetry); });
+    });
+  }
   /** @param {(state:any)=>any} mutate @param {number} [tries] @returns {Promise<{ok:boolean, declined?:boolean, state:any}>} */
   function withState(mutate, tries) {
-    tries = tries == null ? MAX_TRIES : tries;
-    return ghGet(STATE_PATH).then(function (cur) {
-      var state = cur ? cur.json : C.emptyState();
-      var sha = cur ? cur.sha : undefined;
-      var next = mutate(state);
-      if (next == null) return { ok: false, declined: true, state: state }; // mutator declined — no write
-      return ghPut(STATE_PATH, next, sha).then(function () { return { ok: true, state: next }; });
-    }).catch(function (e) {
-      if (C.isRetryable(e && e.kind) && tries > 0) return delay(backoff(MAX_TRIES - tries)).then(function () { return withState(mutate, tries - 1); });
-      throw e;
-    });
+    var run = stateChain.catch(function () {}).then(function () { return withStateAttempt(mutate, tries); });
+    stateChain = run.catch(function () {}); // keep the chain resolve-only so one failure can't wedge the queue
+    return run;
+  }
+  /** @param {(state:any)=>any} mutate @param {number} [tries] @returns {Promise<{ok:boolean, declined?:boolean, state:any}>} */
+  function withStateAttempt(mutate, tries) {
+    return retryWithBackoff(function () {
+      return ghGet(STATE_PATH).then(function (cur) {
+        var state = cur ? cur.json : C.emptyState();
+        var sha = cur ? cur.sha : undefined;
+        var next = mutate(state);
+        if (next == null) return { ok: false, declined: true, state: state }; // mutator declined — no write
+        return ghPut(STATE_PATH, next, sha).then(function () { return { ok: true, state: next }; });
+      });
+    }, tries == null ? MAX_TRIES : tries);
   }
 
   // Merge a batch of {itemId: verdict} into a reviewer's verdict file, union-preserving prior
   // decisions, under CAS. One commit per call regardless of batch size. Throws a typed error on
-  // final failure. The verdict writer (makeVerdictWriter) serializes calls so no two overlap on the
-  // same file — the CAS retry here only ever handles a genuine cross-device race.
-  /** @param {string} bucketId @param {string} reviewer @param {Record<string,string>} newDecisions @param {number} [tries] @returns {Promise<any>} */
-  function saveVerdicts(bucketId, reviewer, newDecisions, tries) {
-    tries = tries == null ? MAX_TRIES : tries;
+  // final failure.
+  //
+  // A verdict file has exactly ONE writer (this reviewer, serialized by makeVerdictWriter), so the
+  // caller can THREAD the authoritative snapshot forward: when `snapshot` ({sha, decisions}) is
+  // supplied, we already know the file's sha and contents from our own last PUT and skip the GET
+  // entirely — the post-write GET is exactly what sampled GitHub's read-after-write staleness window
+  // and 409-stormed across a fast reviewer's successive flushes. A GET happens only on cold start (no
+  // snapshot) or a genuine cross-device 409, where we invalidate, refetch, and re-union so no device's
+  // verdicts are lost (unionVerdicts keeps both, latest-timestamp-per-item winning). Resolves the NEW
+  // snapshot {sha, decisions} for the writer to thread into the next flush.
+  /** @typedef {{sha:(string|undefined), decisions:Record<string, import("./calibration-core.js").VerdictCell>}} VerdictSnapshot */
+  /** @param {string} bucketId @param {string} reviewer @param {Record<string,string>} newDecisions
+   *  @param {VerdictSnapshot|null} [snapshot]
+   *  @param {number} [tries] @returns {Promise<VerdictSnapshot>} */
+  function saveVerdicts(bucketId, reviewer, newDecisions, snapshot, tries) {
     var path = "verdicts/" + encodeURIComponent(bucketId) + "__" + encodeURIComponent(reviewer) + ".json";
-    return ghGet(path).then(function (cur) {
-      var decisions = cur ? (cur.json.decisions || {}) : {};
-      decisions = C.unionVerdicts({}, decisions); // normalize (drop malformed cells)
-      var now = Date.now();
-      Object.keys(newDecisions).forEach(function (id) { decisions[id] = { verdict: newDecisions[id], timestamp: now }; });
-      var payload = { reviewer: reviewer, bucket_id: bucketId, decisions: decisions };
-      return ghPut(path, payload, cur ? cur.sha : undefined);
-    }).catch(function (e) {
-      if (C.isRetryable(e && e.kind) && tries > 0) return delay(backoff(MAX_TRIES - tries)).then(function () { return saveVerdicts(bucketId, reviewer, newDecisions, tries - 1); });
-      throw e;
-    });
+    // `snapshot` is re-read on each attempt; a genuine 409 drops it (onRetry below) so the retry
+    // re-GETs fresh and re-unions — no verdict lost. A network blip keeps it (our sha is still valid).
+    return retryWithBackoff(function () {
+      var seed = snapshot
+        ? Promise.resolve({ sha: snapshot.sha, decisions: snapshot.decisions })
+        : ghGet(path).then(function (cur) {
+            return { sha: cur ? cur.sha : undefined, decisions: cur ? (cur.json.decisions || {}) : {} };
+          });
+      return seed.then(function (base) {
+        var decisions = C.unionVerdicts({}, base.decisions); // clone + normalize; never mutate the threaded snapshot in place
+        var now = Date.now();
+        Object.keys(newDecisions).forEach(function (id) { decisions[id] = { verdict: newDecisions[id], timestamp: now }; });
+        var payload = { reviewer: reviewer, bucket_id: bucketId, decisions: decisions };
+        return ghPut(path, payload, base.sha).then(function (r) { return { sha: r.sha, decisions: decisions }; });
+      });
+    }, tries == null ? MAX_TRIES : tries, function (e) { if (e && e.kind === "CAS") snapshot = null; });
   }
 
   // Coalescing serialized writer for verdict files. Rapid labels accumulate in `pending` and flush
   // together (one commit per file), and every flush runs behind a single `chain` promise so two
-  // GET→PUT cycles can never overlap on the same file — the 409 sha-race is structurally impossible,
-  // not merely retried, and N labels collapse to a handful of commits (dodging the secondary rate
-  // limit). io.save persists one file's batch; io.onSaved / io.onFailed report which item ids landed
-  // or need re-labeling. Injected so the writer is unit-testable without the DOM.
-  /** @param {{save:(b:string,r:string,d:Record<string,string>)=>Promise<any>, onSaved?:(ids:string[])=>void, onFailed?:(ids:string[], err:any)=>void, isRetryable?:(err:any)=>boolean, debounceMs?:number, retryMs?:number}} io */
+  // GET→PUT cycles can never overlap on the same file, and N labels collapse to a handful of commits
+  // (dodging the secondary rate limit). The writer also holds each file's authoritative {sha,
+  // decisions} snapshot (seeded from the file on the first flush, then advanced from every PUT
+  // response) and threads it into `io.save`, so successive flushes never re-GET a just-written file —
+  // that post-write GET is what sampled GitHub's read-after-write staleness and 409-stormed. A failed
+  // flush drops the snapshot so the next attempt re-seeds from GitHub. io.save persists one file's
+  // batch given the prior snapshot and resolves the NEW snapshot; io.onSaved / io.onFailed report
+  // which item ids landed or need re-labeling. Injected so the writer is unit-testable without the DOM.
+  /** @param {{save:(b:string,r:string,d:Record<string,string>,snapshot:(VerdictSnapshot|null))=>Promise<VerdictSnapshot>, onSaved?:(ids:string[])=>void, onFailed?:(ids:string[], err:any)=>void, isRetryable?:(err:any)=>boolean, debounceMs?:number, retryMs?:number}} io */
   function makeVerdictWriter(io) {
     var debounceMs = io.debounceMs == null ? 700 : io.debounceMs;
     var retryMs = io.retryMs == null ? 3000 : io.retryMs; // spacing before an automatic re-flush after a retryable failure
     /** @type {Record<string, {bucketId:string, reviewer:string, decisions:Record<string,string>}>} */
     var pending = {};
-    /** @type {Promise<any>} */
+    /** @type {Record<string, VerdictSnapshot|null>} */
+    var snap = {}; // per-file authoritative {sha, decisions} threaded across flushes (null/absent ⇒ re-seed via GET)
+    /** @type {Promise<unknown>} */
     var chain = Promise.resolve();
     /** @type {any} */
     var timer = null;
@@ -224,12 +294,14 @@
             Object.keys(decisions).forEach(function (id) { var v = decisions[id]; if (v != null) batch[id] = v; });
             var ids = Object.keys(batch);
             if (!ids.length) { delete pending[k]; return; }
-            return io.save(slot.bucketId, slot.reviewer, batch).then(function () {
+            return io.save(slot.bucketId, slot.reviewer, batch, snap[k] || null).then(function (nextSnap) {
+              snap[k] = nextSnap; // advance the threaded snapshot from the PUT response (io.save resolves the new snapshot)
               // clear only the items we flushed whose verdict hasn't changed since the snapshot
               ids.forEach(function (id) { if (decisions[id] === batch[id]) delete decisions[id]; });
               if (!Object.keys(decisions).length) delete pending[k];
               try { if (io.onSaved) io.onSaved(ids); } catch (e) { /* a callback throw must not poison the chain */ }
             }, function (err) {
+              snap[k] = null; // the file's sha is now uncertain — re-seed from GitHub on the next attempt
               try { if (io.onFailed) io.onFailed(ids, err); } catch (e) { /* as above */ } // items stay in `pending`
               // Only a retryable failure earns an automatic re-flush; a permanent one (AUTH/OTHER) would
               // otherwise spin a forever request loop — and a 403 secondary-rate-limit maps to AUTH, so
@@ -317,24 +389,50 @@
   // take-over `takingOver` is set, so `afterLock` treats our self-abort as intentional, not a real loss.
   /** @type {AbortController|null} */
   var lockCtl = null;
+  /** @type {((v?: any) => void)|null} */ // a Promise resolver (its value is unused); the optional-arg `any` is what a resolver assignment requires
+  var heldRelease = null;       // resolves the held-lock callback promise → releases our hold (see releaseLock)
+  var releasing = false;        // a self-initiated release (pagehide) is in flight — its lock-callback settle is NOT a loss to re-elect on
   var takingOver = false;       // in-flight guard: a take-over is between click and settle (no double-fire)
   var pendingBoardFocus = false; // move focus to the board heading after a take-over, for keyboard/SR users
   function manageLock() {
     if (!hasLocks()) { lockState = "unsupported"; recomputeMode(); return; }
     lockState = "electing"; recomputeMode();
-    var electing = setTimeout(function () { if (lockState === "electing") { lockState = "waiting"; recomputeMode(); } }, 300);
+    // A slow grant is NOT proof another tab holds the lock. Instead of flipping to a read-only
+    // "another tab is active" banner on a bare 300ms timeout — which also fires on a reload's teardown
+    // race or a momentarily busy main thread with no real competitor — confirm a genuine foreign
+    // holder via navigator.locks.query() first. If nobody actually holds our lock, keep electing: a
+    // free lock is granted to its sole requester, so the grant is imminent and the held-callback below
+    // will stop this recheck. Only a real foreign holder makes this tab passive.
+    var electing = setTimeout(function reelect() {
+      if (lockState !== "electing") return;
+      if (!navigator.locks.query) { lockState = "waiting"; recomputeMode(); return; } // no query() → fall back to the timeout heuristic
+      navigator.locks.query().then(function (q) {
+        if (lockState !== "electing") return; // granted (or torn down) meanwhile
+        var name = lockName();
+        var foreign = (q.held || []).some(function (l) { return l.name === name; }); // we don't hold it yet, so any holder is another tab
+        if (foreign) { lockState = "waiting"; recomputeMode(); }
+        else electing = setTimeout(reelect, 300); // nobody holds it — the grant is just slow; re-check, don't cry wolf
+      }, function () { if (lockState === "electing") { lockState = "waiting"; recomputeMode(); } }); // query() failed → heuristic
+    }, 300);
     lockCtl = new AbortController();
     var locks = navigator.locks;
     locks.request(lockName(), { signal: lockCtl.signal }, function () {
       clearTimeout(electing); lockState = "held"; recomputeMode();
-      return new Promise(function () {}); // hold until tab teardown or steal
+      return new Promise(function (resolve) { heldRelease = resolve; }); // hold until tab teardown, steal, or explicit release (pagehide)
     }).then(afterLock, afterLock);
     function afterLock() {
-      clearTimeout(electing);
+      clearTimeout(electing); heldRelease = null;
       if (takingOver) return; // our own abort en route to a steal — the steal re-holds; not a real loss
+      if (releasing) { releasing = false; return; } // our own pagehide release — pageshow re-elects, not us (else two elections race)
       if (reviewer && !authFailed) manageLock(); // lost or stolen-from → re-elect (queue for promotion)
     }
   }
+  // Release our held Web Lock immediately (used on pagehide): a reloading/closing tab must free the
+  // lock BEFORE the next document elects, or that document's query() would see this dying tab as a
+  // foreign holder and show a false "another tab is active" banner. `releasing` tells the lock
+  // callback's settle handler (afterLock / afterSteal) that this settle is our own doing, so it must
+  // NOT auto-re-elect — a bfcache restore re-elects exactly once, via the pageshow handler.
+  function releaseLock() { if (heldRelease) { releasing = true; heldRelease(); heldRelease = null; } }
   // "Make this the active session" — become the SOLE active writer in ONE action by seizing BOTH tiers:
   // the cross-browser presence marker (always) and, when another tab in this browser holds it, the
   // intra-browser Web Lock. Seizing only one leaves the session stuck one tier short (lock without
@@ -354,9 +452,9 @@
       if (lockCtl) lockCtl.abort(); // cancel our own pending wait first (afterLock sees `takingOver`)
       navigator.locks.request(lockName(), { steal: true }, function () {
         lockState = "held"; recomputeMode(); rerenderCurrent(); done();
-        return new Promise(function () {});
+        return new Promise(function (resolve) { heldRelease = resolve; }); // releasable on pagehide, like the elected hold
       }).then(afterSteal, afterSteal);
-      function afterSteal() { done(); if (reviewer && !authFailed) manageLock(); }
+      function afterSteal() { done(); if (releasing) { releasing = false; return; } if (reviewer && !authFailed) manageLock(); } // same self-release guard as afterLock
     }
   }
 
@@ -660,11 +758,18 @@
       document.addEventListener("visibilitychange", function () { if (!document.hidden) { recomputeMode(); pollBoard(); } });
       // A page restored from the bfcache is a fresh document but keeps its session; re-FETCH then
       // re-derive so a take-over that happened while it was frozen (visible only server-side) is
-      // reflected — recomputeMode alone reads stale in-memory state.
-      window.addEventListener("pageshow", function (e) { if (e && e.persisted) refreshState().then(recomputeMode).catch(function () {}); });
-      // Best-effort: kick a flush as the tab is hidden/closed so buffered verdicts get one last chance
-      // to land before the in-flight fetch is torn down (the debounce window is otherwise up to ~700ms).
-      document.addEventListener("pagehide", function () { verdictWriter.flushNow(); });
+      // reflected — recomputeMode alone reads stale in-memory state. It also re-elects the Web Lock,
+      // which pagehide released when the page was frozen (below).
+      window.addEventListener("pageshow", function (e) {
+        if (!e || !e.persisted) return;
+        if (reviewer && !authFailed) manageLock(); // re-acquire the lock we released on pagehide-into-bfcache
+        refreshState().then(recomputeMode).catch(function () {});
+      });
+      // On hide/close/reload: flush buffered verdicts (the debounce window is otherwise up to ~700ms),
+      // and RELEASE the Web Lock so the next document (a reload) elects without seeing this dying tab
+      // as a foreign holder — the false "another tab is active" banner. A bfcache restore re-elects
+      // via pageshow above.
+      document.addEventListener("pagehide", function () { verdictWriter.flushNow(); releaseLock(); });
     }
   }
 
