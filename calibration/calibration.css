@@ -12,9 +12,12 @@ button {
   font-family: var(--sans); font-size: 0.95rem; cursor: pointer;
   border: 1px solid var(--rule); background: var(--bg-elevated); color: var(--fg);
   border-radius: 8px; padding: 0.5rem 0.9rem; margin: 0.4rem 0.4rem 0.4rem 0;
-  transition: background 120ms, color 120ms, border-color 120ms;
+  transition: background 120ms, color 120ms, border-color 120ms, transform 80ms;
 }
 button:hover { border-color: var(--accent); }
+/* Press feedback: a quick, subtle scale-down so a click/tap reads as landing (pointer input has no
+   keyboard flash). ~80ms so it feels tactile, not laggy. Disabled under reduced-motion below. */
+button:active { transform: scale(0.97); }
 button.primary { background: var(--accent); color: #fff; border-color: transparent; }
 button.primary:hover { filter: brightness(1.1); }
 button.secondary { font-size: 0.82rem; padding: 0.35rem 0.7rem; color: var(--fg-muted); }
@@ -34,10 +37,12 @@ select, .name-input {
   display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.75rem; }
 .banner-action { margin: 0; font-size: 0.82rem; padding: 0.35rem 0.75rem; flex: none; }
 
-/* Calm positive save indicator for normal batching (never an error). Collapses to nothing when idle. */
-.save-indicator { font-size: 0.82rem; color: var(--fg-subtle); min-height: 1.1em; margin: 0 0 0.4rem;
-  transition: color 150ms; }
-.save-indicator:empty { min-height: 0; margin: 0; }
+/* Calm positive save indicator for normal batching (never an error). The slot reserves exactly one
+   text line permanently — even when idle/empty — so the card never shifts as "Saving…/✓ Saved" appears
+   and clears. line-height and min-height are the SAME unit so an empty slot and a filled one are the
+   same height (a shorter min-height would let the filled line grow the box and reintroduce the jitter). */
+.save-indicator { font-size: 0.82rem; color: var(--fg-subtle); line-height: 1.5; min-height: 1.5em;
+  margin: 0 0 0.4rem; transition: color 150ms; }
 /* A gently spinning glyph on the busy states (Saving… and Claiming… share the .saving class) so a
    slow background write reads as working, not hung. Motion disabled below under reduced-motion. */
 .save-indicator.saving::before { content: "◌"; display: inline-block; margin-right: 0.35em;
@@ -56,10 +61,31 @@ select, .name-input {
 .chip { display: inline-block; background: var(--bg-soft); color: var(--fg-subtle); border-radius: 999px;
   padding: 0.15rem 0.7rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
 .q { font-size: 0.95rem; color: var(--fg-muted); margin: 1.1rem 0 0.5rem; }
+/* .q receives programmatic focus after every card rebuild (review-widget gives it tabindex=-1) purely
+   to keep screen-reader/keyboard continuity — it is not a user-operated control, so it must never paint
+   a focus ring (the browser's :focus-visible heuristic would otherwise ring it after a keyboard choice).
+   Genuine interactive controls keep their ring. */
+.q:focus { outline: none; }
 .names { display: flex; flex-direction: column; gap: 0.6rem; margin: 0.5rem 0 1.4rem; }
 .name { background: var(--bg-soft); border: 1px solid var(--rule-soft); border-radius: 10px;
   padding: 0.85rem 1rem; font-size: 1.1rem; font-weight: 500; word-break: break-word; }
 .choices { display: flex; gap: 0.75rem; } .choices button { flex: 1; padding: 1rem; font-size: 1rem; }
+/* The large choice/unsure targets read as tappable cards: a soft border + faint shadow at rest, and a
+   gentle lift with a deeper shadow on hover — elevation rather than a flat colour wash. Once chosen they
+   flip to the solid navy selected state. Transitions ~150ms so state changes feel responsive. */
+.choices button, button.unsure {
+  border-color: var(--rule-soft); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: background 150ms, color 150ms, border-color 150ms, box-shadow 150ms, transform 120ms;
+}
+.choices button:not(.primary):hover, button.unsure:not(.primary):hover {
+  border-color: var(--rule); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.09); transform: translateY(-1px);
+}
+/* The chosen button confirms IN PLACE: it flips to the selected navy state — the same state shown when
+   navigating back to a decided item — plus one quick "pop", so a keyboard 1/2/u press is felt on the
+   button the reviewer is looking at. The card advances just as this settles; the class is gone on the
+   next render. Motion dropped under reduced-motion below (the colour flip still confirms). */
+.choices button.just-picked, button.unsure.just-picked { animation: calib-pick 160ms ease-out; }
+@keyframes calib-pick { 0% { transform: scale(0.97); } 55% { transform: scale(1.04); } 100% { transform: scale(1); } }
 /* Same padding/font as the choice buttons so all three stack at one height; the muted colour keeps
    Unsure visually secondary without making it a different size. */
 .unsure-row { margin-top: 0.6rem; } button.unsure { width: 100%; color: var(--fg-muted); font-size: 1rem; padding: 1rem; }
@@ -76,7 +102,9 @@ select, .name-input {
    would otherwise blow Prev/Next up to a full 1fr column width. */
 .nav > :first-child { justify-self: start; }
 .nav > :last-child { justify-self: end; }
-.done { text-align: center; color: var(--fg-muted); padding: 3rem 0; font-size: 1rem; }
+.done { text-align: center; color: var(--fg-muted); padding: 3rem 0 1.25rem; font-size: 1rem; }
+/* Completion actions, centred directly under the "Bucket complete" confirmation (not floated top-left). */
+.done-actions { display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; }
 /* Indeterminate progress for the completion flush — a network round-trip of unknown length, so the
    bar sweeps rather than lying with a percentage. */
 .progress { height: 4px; max-width: 18rem; margin: 1rem auto 0; background: var(--bg-soft);
@@ -87,6 +115,10 @@ select, .name-input {
 @media (prefers-reduced-motion: reduce) {
   .progress.indeterminate .bar { animation: none; width: 100%; opacity: 0.5; }
   .save-indicator.saving::before { animation: none; }
+  /* Drop movement everywhere; the colour/state changes still carry the feedback. */
+  button:active { transform: none; }
+  .choices button:not(.primary):hover, button.unsure:not(.primary):hover { transform: none; }
+  .choices button.just-picked, button.unsure.just-picked { animation: none; } /* the navy flip alone confirms */
 }
 .error { color: var(--pending); padding: 1rem 0; }
 .practice-note { background: var(--accent-soft); border: 1px solid var(--rule); border-radius: 10px;

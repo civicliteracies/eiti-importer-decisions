@@ -29,6 +29,7 @@
  * @typedef {{ roster: string[], buckets: Record<string, BucketState>, sessions?: Record<string, SessionRec> }} CoordState
  * @typedef {{ verdict: string, timestamp: number }} VerdictCell
  * @typedef {{ ok: boolean, reason?: string, state: CoordState }} CoordResult
+ * @typedef {{ bucket_id: string, stratum: string, item_ids: string[], confirmations_required: number }} Bucket
  */
 
 (function (/** @type {any} */ root) {
@@ -125,9 +126,31 @@
   }
 
   /**
+   * The first bucket this reviewer can still open — one available to claim, or their own in-progress —
+   * scanning `buckets` in board order and skipping `excludeId`. This is the board's per-bucket openable
+   * predicate (bucketStatus state "available" or "mine") applied across the whole list, so a "review the
+   * next one" shortcut targets exactly what the board would let them open. Null when none remain.
+   * @param {Pick<Bucket, "bucket_id" | "confirmations_required">[]} buckets - buckets.json entries (only bucket_id + confirmations_required are read)
+   * @param {CoordState} state
+   * @param {string} reviewer
+   * @param {number} now
+   * @param {string|null} [excludeId] - a bucket to skip (typically the one just completed)
+   * @param {number} [ttlMs]
+   * @returns {(Pick<Bucket, "bucket_id" | "confirmations_required">|null)}
+   */
+  function nextOpenBucket(buckets, state, reviewer, now, excludeId, ttlMs) {
+    for (var i = 0; i < buckets.length; i++) {
+      var b = buckets[i];
+      if (!b || (excludeId && b.bucket_id === excludeId)) continue;
+      var st = bucketStatus(state.buckets[b.bucket_id], b.confirmations_required, reviewer, now, ttlMs);
+      if (st.state === "available" || st.state === "mine") return b;
+    }
+    return null;
+  }
+
+  /**
    * Campaign-wide progress for the summary dashboard — reviewer-agnostic. Pure over (buckets, state).
-   * Buckets: the buckets.json array ({ bucket_id, stratum, item_ids, confirmations_required }).
-   * @param {Array<{ bucket_id: string, stratum: string, item_ids: string[], confirmations_required: number }>} buckets
+   * @param {Bucket[]} buckets - the buckets.json array
    * @param {CoordState} state
    * @param {number} now
    * @param {number} [ttlMs]
@@ -504,6 +527,7 @@
     activeClaimants: activeClaimants,
     holders: holders,
     bucketStatus: bucketStatus,
+    nextOpenBucket: nextOpenBucket,
     campaignSummary: campaignSummary,
     validateReviewerName: validateReviewerName,
     registerName: registerName,

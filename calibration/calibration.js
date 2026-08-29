@@ -200,18 +200,24 @@
   }
   /** @param {(state:any)=>any} mutate @param {number} [tries] @returns {Promise<{ok:boolean, declined?:boolean, state:any}>} */
   function withState(mutate, tries) {
-    var run = stateChain.catch(function () {}).then(function () { return withStateAttempt(mutate, tries); });
+    // The single funnel for state.json OWNS state coherence: whatever an attempt resolves — the newly
+    // written state on success, or the freshly-fetched state on a decline — becomes the module `state`
+    // here, once, on resolution. Mutators are pure over their `s` argument and must NOT assign `state`
+    // themselves; making adoption a per-call-site chore is what let one decline path silently skip it.
+    // (On a final failure the assignment .then is skipped, so a failed write never adopts a partial read.)
+    var run = stateChain.catch(function () {}).then(function () { return withStateAttempt(mutate, tries); })
+      .then(function (res) { state = res.state; return res; });
     stateChain = run.catch(function () {}); // keep the chain resolve-only so one failure can't wedge the queue
     return run;
   }
-  /** @param {(state:any)=>any} mutate @param {number} [tries] @returns {Promise<{ok:boolean, declined?:boolean, state:any}>} */
+  /** @param {(s:any)=>any} mutate @param {number} [tries] @returns {Promise<{ok:boolean, declined?:boolean, state:any}>} */
   function withStateAttempt(mutate, tries) {
     return retryWithBackoff(function () {
       return ghGet(STATE_PATH).then(function (cur) {
-        var state = cur ? cur.json : C.emptyState();
+        var fetched = cur ? cur.json : C.emptyState(); // local — do not shadow the module `state`
         var sha = cur ? cur.sha : undefined;
-        var next = mutate(state);
-        if (next == null) return { ok: false, declined: true, state: state }; // mutator declined — no write
+        var next = mutate(fetched);
+        if (next == null) return { ok: false, declined: true, state: fetched }; // mutator declined — no write; adopt the fetch
         return ghPut(STATE_PATH, next, sha).then(function () { return { ok: true, state: next }; });
       });
     }, tries == null ? MAX_TRIES : tries);
@@ -329,7 +335,7 @@
 
   // ---- app state (in memory) --------------------------------------------------------------------
   /** @type {any[]} */ var SCAFFOLDS = [];
-  /** @type {any[]} */ var BUCKETS = [];
+  /** @type {import("./calibration-core.js").Bucket[]} */ var BUCKETS = [];
   /** @type {any} */ var MANIFEST = {};
   /** @type {Record<string, any>} */ var ITEMS_BY_ID = {};
   var state = C ? C.emptyState() : { roster: [], buckets: {} };
@@ -443,7 +449,7 @@
     var pending = 1; // count the async seizes; clear `takingOver` only when all have settled
     function done() { if (--pending <= 0) takingOver = false; }
     // Presence: claim the marker for this session; a remote/other holder steps down on its next read.
-    withState(function (s) { state = C.takeoverSession(s, reviewer, SESSION_ID, Date.now()).state; return state; })
+    withState(function (s) { return C.takeoverSession(s, reviewer, SESSION_ID, Date.now()).state; })
       .then(function () { recomputeMode(); rerenderCurrent(); done(); })
       .catch(function (e) { reportSyncFailure(e); done(); });
     // Lock: steal it only when we don't already hold it (a self-steal would needlessly churn our hold).
@@ -459,23 +465,22 @@
   }
 
   // Decide the presence write over freshly-fetched state: claim a free/stale slot or refresh our own,
-  // or return null to decline when a live FOREIGN session holds the name. Pure — the caller always
-  // adopts the fetched state regardless, so a decline still updates our view of reality.
+  // or return null to decline when a live FOREIGN session holds the name. Pure over `s`; withState
+  // adopts the fetched state on a decline, so a displaced session still updates its view of reality.
   /** @param {any} s @param {string} rev @param {string} sid @param {number} now @returns {any} */
   function presenceMutation(s, rev, sid, now) {
     if (C.sessionHeldByOther(s, rev, sid, now)) return null; // a live foreign holder — don't write over it
     return C.claimSession(s, rev, sid, now).state;
   }
 
-  // Persist our presence marker. Adopts the freshly-fetched state UNCONDITIONALLY (even on decline) so
-  // a session that has just been displaced converges to passive on the next recompute instead of
-  // spinning against stale state. One write in flight at a time.
+  // Persist our presence marker. On a decline (a live foreign holder) withState still adopts the fresh
+  // fetch, so a just-displaced session converges to passive on the next recompute rather than spinning
+  // against stale state. One write in flight at a time.
   var presenceWriting = false;
   function writePresence() {
     if (presenceWriting || authFailed || !reviewer) return;
     presenceWriting = true;
     withState(function (s) {
-      state = s; // adopt the fresh fetch first — a decline must still update `state`
       return presenceMutation(s, reviewer, SESSION_ID, Date.now());
     }).then(
       function () { presenceWriting = false; recomputeMode(); },
@@ -586,7 +591,7 @@
     }
   }
 
-  function refreshState() { return withState(function (s) { state = s; return null; }).then(function () { return state; }); }
+  function refreshState() { return withState(function () { return null; }).then(function () { return state; }); } // null → no write; withState adopts the fetch into `state`
 
   function renderRoster() {
     view.mode = "roster";
@@ -611,7 +616,7 @@
       withState(function (s) {
         var r = C.registerName(s, name);
         if (!r.ok) { alert("Can't use that name: " + r.reason); return null; } // decline — no write
-        state = r.state; return r.state;
+        return r.state;
       }).then(function (res) {
         if (res.ok) setReviewer(name, false); // brand-new registration → show the one-time tutorial
       }).catch(function (e) { reportSyncFailure(e); });
@@ -794,6 +799,11 @@
   }
 
   var openGeneration = 0; // a later openBucket supersedes an earlier in-flight one (the reviewer went Back + re-opened)
+  // Distinct from openGeneration: this counts labeling SESSIONS (each openBucket = a fresh session at idx 0),
+  // so a confirm-beat advance timer captured in one session can tell it's stale after a Back → re-open of the
+  // SAME bucket. Bucket object identity can't: BUCKETS entries are stable references, so a reopened bucket is
+  // `===` the one the timer captured even though idx was reset to 0 in between.
+  var labelGeneration = 0;
   /** @param {any} b */
   function openBucket(b) {
     if (!isActive()) { renderBoard(); return; } // auth/passive/electing can't claim — the board is the path forward
@@ -803,17 +813,15 @@
     // (C.complete) — not the claim — is what keeps surplus confirmations out of the analysis, so a slow
     // or failed claim never costs the reviewer their place.
     var gen = ++openGeneration; // the "← Back to buckets" button is live during the claim, so a second open can race this one
+    labelGeneration++;          // a fresh labeling session — invalidates any confirm-beat advance timer from a prior one
     view.bucket = b; view.idx = 0; view.notice = null; noticeAnnounced = false;
     renderLabel();
     beginClaiming();
     withState(function (s) {
-      var next = claimWithPresence(s, b, reviewer, SESSION_ID, Date.now());
-      if (next != null) state = next; // adopt fresh-fetched state on a successful claim
-      return next; // null → declined (full bucket, or a live foreign session holds the name)
+      return claimWithPresence(s, b, reviewer, SESSION_ID, Date.now()); // null → declined (full bucket, or a live foreign session holds the name)
     }).then(function (res) {
       if (gen !== openGeneration) return; // a newer open supersedes this: its stale state/notice must not land
-      if (res.declined) state = res.state; // adopt the fresh state even when declined — it may reveal we were taken over
-      recomputeMode();                      // demotes to the read-only board if a take-over landed
+      recomputeMode();                    // withState already adopted the fresh state (new on claim, fetched on decline); demotes to the read-only board if a take-over landed
       // Still active after a decline ⇒ the cause was a FULL bucket, not a take-over. Split/disposition
       // buckets need only one reviewer, so two reviewers opening the same one is an ordinary race. Keep
       // the reviewer on the screen (no bounce), but tell them their answers here may not be needed.
@@ -838,17 +846,52 @@
     });
   }
 
+  // A choice confirms ON the chosen button (where the reviewer's eyes are), then advances after a short
+  // beat, rather than swapping the card instantly. `choiceLocked` covers that beat so a second keypress
+  // can't act on the current item twice or race the pending advance — extra presses during the ~150ms
+  // window are ignored (a human reviewing can't out-pace it; a key-masher's spare presses are dropped,
+  // never mis-assigned). Research puts ~150ms at the boundary where a state change reads as responsive.
+  var CHOICE_ADVANCE_MS = 160;
+  var choiceLocked = false;
+
+  // Paint the chosen button into its selected state in place + a one-shot press animation, so the
+  // confirmation lands on the button the reviewer just hit (click or keyboard) — the SAME navy selected
+  // state they see when navigating back, so there's no separate visual vocabulary to learn.
+  /** @param {string} v */
+  function flashChosen(v) {
+    if (typeof document === "undefined") return;
+    var card = root.querySelector(".card");
+    if (!card) return;
+    var sel = '[data-verdict="' + (typeof CSS !== "undefined" && CSS.escape ? CSS.escape(v) : v) + '"]';
+    var btn = card.querySelector(sel);
+    if (btn) btn.classList.add("primary", "just-picked");
+  }
+
+  // Advance/retreat, gated by the confirm beat so a nav action can't race a pending choice-advance.
+  function goNext() { if (choiceLocked) return; view.idx += 1; renderLabel(); }
+  function goPrev() { if (choiceLocked) return; view.idx = Math.max(0, view.idx - 1); renderLabel(); }
+
   // One place both the click and the keydown paths commit a verdict + advance.
   /** @param {string} v */
   function chooseAndAdvance(v) {
+    if (choiceLocked) return; // mid-confirm beat — ignore extra presses (see CHOICE_ADVANCE_MS)
     var items = scaffoldsFor(view.bucket);
     var it = items[view.idx];
     if (!it) return;
     view.localVerdicts[it.item_id] = v;
     delete view.unsaved[it.item_id];
     if (isActive()) { verdictWriter.queue(view.bucket.bucket_id, reviewer, it.item_id, v); markSaving(); } // gated: only the active session auto-saves
-    view.idx += 1;
-    renderLabel();
+    flashChosen(v);         // confirm on the button…
+    choiceLocked = true;
+    var genAtChoice = labelGeneration;
+    setTimeout(function () { // …then advance — unless the reviewer left this labeling session during the beat
+      choiceLocked = false;
+      // Bail if they left the label screen (Back/complete → mode changed) OR re-entered a new session
+      // (Back → re-open bumps labelGeneration), so a stale timer never advances a freshly-reset idx.
+      if (view.mode !== "label" || genAtChoice !== labelGeneration) return;
+      view.idx += 1;
+      renderLabel();
+    }, CHOICE_ADVANCE_MS);
   }
 
   function renderLabel() {
@@ -906,8 +949,8 @@
     W.renderReviewItem(document, main, it, (view.localVerdicts[it.item_id] || null), {
       reveal: false, position: view.idx + 1, total: items.length,
       onChoose: chooseAndAdvance,
-      onNext: function () { view.idx += 1; renderLabel(); },
-      onPrev: function () { view.idx = Math.max(0, view.idx - 1); renderLabel(); },
+      onNext: goNext,
+      onPrev: goPrev,
     });
   }
 
@@ -919,17 +962,27 @@
   function markBucketComplete(bucket) {
     function onThisScreen() { return view.bucket === bucket && view.mode === "completing"; }
     withState(function (s) {
-      var next = completeWithPresence(s, bucket, reviewer, SESSION_ID, Date.now());
-      if (next != null) state = next;
-      return next; // null → already at capacity via others; withState writes nothing
+      return completeWithPresence(s, bucket, reviewer, SESSION_ID, Date.now()); // null → already at capacity via others; withState writes nothing
     }).then(function (res) {
-      recomputeMode();
+      recomputeMode(); // withState already adopted the fresh state (new on completion, fetched on decline) — so this and the "Review next" suggestion below read current state, and a take-over demotes to read-only
       if (!onThisScreen()) return; // reviewer moved on — state is updated, but don't clobber their screen
       root.textContent = "";
-      root.appendChild(button("← Back to buckets", function () { renderBoard(); }));
+      // The next reviewable bucket, if any — offered so a reviewer working through several doesn't detour
+      // via the board each time. Shown only when one remains (gate + selector mirror the board's openable
+      // rule); on the last bucket, only "Back to buckets" appears. Computed first so the message can adapt.
+      var nxt = isActive() ? C.nextOpenBucket(BUCKETS, state, reviewer, Date.now(), bucket.bucket_id) : null;
       root.appendChild(status(res.declined
         ? "This bucket was already completed by enough other reviewers while you were away — your answers are saved but it needed no more."
-        : "Bucket complete. Thank you! Pick another from the board."));
+        : nxt ? "Bucket complete. Thank you!" : "Bucket complete. Thank you! Pick another from the board."));
+      // Actions sit centred BELOW the confirmation, reading as "done → what next", not floated in a corner.
+      var actions = el("div", "done-actions");
+      actions.appendChild(button("← Back to buckets", function () { renderBoard(); }));
+      if (nxt) {
+        var nextBtn = button("Review next →", function () { openBucket(nxt); });
+        nextBtn.className = "primary";
+        actions.appendChild(nextBtn);
+      }
+      root.appendChild(actions);
     }).catch(function (e) {
       reportSyncFailure(e);
       if (onThisScreen()) root.appendChild(status("Your answers are saved, but marking the bucket complete failed — click Refresh on the board and it will reconcile."));
@@ -966,8 +1019,8 @@
       W.reviewItemKeydown(e, {
         item: view.idx < items.length ? items[view.idx] : null,
         onChoose: chooseAndAdvance,
-        onNext: function () { view.idx += 1; renderLabel(); },
-        onPrev: function () { view.idx = Math.max(0, view.idx - 1); renderLabel(); },
+        onNext: goNext,
+        onPrev: goPrev,
       });
     });
   }
@@ -1006,7 +1059,8 @@
   }
 
   var api = { ghGet: ghGet, ghPut: ghPut, withState: withState, saveVerdicts: saveVerdicts, makeVerdictWriter: makeVerdictWriter,
-    claimWithPresence: claimWithPresence, completeWithPresence: completeWithPresence, presenceMutation: presenceMutation };
-  if (typeof module !== "undefined" && module.exports) module.exports = api; // tests import the I/O layer
+    claimWithPresence: claimWithPresence, completeWithPresence: completeWithPresence, presenceMutation: presenceMutation,
+    boot: boot }; // boot is exported so the label-flow test can drive the real page under jsdom (the browser branch auto-boots)
+  if (typeof module !== "undefined" && module.exports) module.exports = api; // tests import the I/O layer + boot
   else boot(); // browser
 })();
