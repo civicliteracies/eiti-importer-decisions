@@ -3670,5 +3670,871 @@
     ],
     "machine_verdict": "entity",
     "machine_detail": "entity"
+  },
+  {
+    "item_id": "gov_entity|AGO|disp|0",
+    "stratum": "disposition",
+    "country_iso3": "AGO",
+    "names": [
+      "Other Govt. Agency"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|ARM|disp|5",
+    "stratum": "disposition",
+    "country_iso3": "ARM",
+    "names": [
+      "Tax Revenue Authority"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|BFA|disp|20",
+    "stratum": "disposition",
+    "country_iso3": "BFA",
+    "names": [
+      "Frais de prestation BUMIGEB"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|CIV|disp|1",
+    "stratum": "disposition",
+    "country_iso3": "CIV",
+    "names": [
+      "Compte de Rehabilitation"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|COD|disp|18",
+    "stratum": "disposition",
+    "country_iso3": "COD",
+    "names": [
+      "Direction des Recettes Provinciales"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|COD|disp|19",
+    "stratum": "disposition",
+    "country_iso3": "COD",
+    "names": [
+      "Direction des Recettes Provinciales (DRP)"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|COD|disp|20",
+    "stratum": "disposition",
+    "country_iso3": "COD",
+    "names": [
+      "Direction des RecettesProvinciales"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|GHA|pair|19-20",
+    "stratum": "split",
+    "country_iso3": "GHA",
+    "names": [
+      "Ghana National Petroleum Company",
+      "Ghana National Petroleum Commission"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|GIN|disp|45",
+    "stratum": "disposition",
+    "country_iso3": "GIN",
+    "names": [
+      "Entreprises en declaration unilaterale"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|IDN|disp|9",
+    "stratum": "disposition",
+    "country_iso3": "IDN",
+    "names": [
+      "Local Community"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|IRQ|disp|17",
+    "stratum": "disposition",
+    "country_iso3": "IRQ",
+    "names": [
+      "Ministry of Finance - General Commission of Tax (through the Ministry of Oil)"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|KAZ|disp|13",
+    "stratum": "disposition",
+    "country_iso3": "KAZ",
+    "names": [
+      "Revenue authority"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|KGZ|disp|1",
+    "stratum": "disposition",
+    "country_iso3": "KGZ",
+    "names": [
+      "Revenue authority"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|KGZ|disp|19",
+    "stratum": "disposition",
+    "country_iso3": "KGZ",
+    "names": [
+      "Налоговый орган"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MDG|pair|0-50",
+    "stratum": "split",
+    "country_iso3": "MDG",
+    "names": [
+      "Administration des Domaines",
+      "Domaine"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MDG|pair|1-50",
+    "stratum": "split",
+    "country_iso3": "MDG",
+    "names": [
+      "Administration des domaines",
+      "Domaine"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MDG|pair|8-55",
+    "stratum": "split",
+    "country_iso3": "MDG",
+    "names": [
+      "Autorite de Regulation des Technologies de Communication (ARTEC)",
+      "Office Malgache d'Etude et de Regulation des Telecommunications"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MDG|pair|8-56",
+    "stratum": "split",
+    "country_iso3": "MDG",
+    "names": [
+      "Autorite de Regulation des Technologies de Communication (ARTEC)",
+      "Office Malgache d'Etude et de Régulation des Télécommunications"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MDG|disp|6",
+    "stratum": "disposition",
+    "country_iso3": "MDG",
+    "names": [
+      "Associes / Actionnaires"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MDG|disp|7",
+    "stratum": "disposition",
+    "country_iso3": "MDG",
+    "names": [
+      "Associés / Actionnaires"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MDG|disp|28",
+    "stratum": "disposition",
+    "country_iso3": "MDG",
+    "names": [
+      "Collectivites Territoriales Decentralisees, Association, ONG"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MDG|disp|62",
+    "stratum": "disposition",
+    "country_iso3": "MDG",
+    "names": [
+      "Organisation Sanitaire"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MDG|disp|63",
+    "stratum": "disposition",
+    "country_iso3": "MDG",
+    "names": [
+      "Organisation Sanitaire Inter Entreprise"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MDG|disp|65",
+    "stratum": "disposition",
+    "country_iso3": "MDG",
+    "names": [
+      "Port"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MLI|pair|15-17",
+    "stratum": "split",
+    "country_iso3": "MLI",
+    "names": [
+      "Direction Nationale des Domaines  (DND)",
+      "Direction Nationale des Domaines et du Cadastre (DNDC)"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MLI|pair|16-17",
+    "stratum": "split",
+    "country_iso3": "MLI",
+    "names": [
+      "Direction Nationale des Domaines (DND)",
+      "Direction Nationale des Domaines et du Cadastre (DNDC)"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MNG|pair|2-3",
+    "stratum": "split",
+    "country_iso3": "MNG",
+    "names": [
+      "Customs General Administration",
+      "Customs Office"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MNG|pair|3-11",
+    "stratum": "split",
+    "country_iso3": "MNG",
+    "names": [
+      "Customs Office",
+      "General Customs Administration of Mongolia"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MNG|pair|3-55",
+    "stratum": "split",
+    "country_iso3": "MNG",
+    "names": [
+      "Customs Office",
+      "Mongolian Customs General Administration"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MNG|disp|5",
+    "stratum": "disposition",
+    "country_iso3": "MNG",
+    "names": [
+      "Donations and supports received by government entities"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MNG|disp|9",
+    "stratum": "disposition",
+    "country_iso3": "MNG",
+    "names": [
+      "General Authority for Customs and Taxation"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|MRT|disp|0",
+    "stratum": "disposition",
+    "country_iso3": "MRT",
+    "names": [
+      "Autre entité de l’État"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|NER|disp|12",
+    "stratum": "disposition",
+    "country_iso3": "NER",
+    "names": [
+      "Forces de Défense et de Sécurité (FDS)"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|NGA|pair|12-18",
+    "stratum": "split",
+    "country_iso3": "NGA",
+    "names": [
+      "Mines Inspectorate Department",
+      "Mining Inspectorate Division"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|NGA|pair|13-18",
+    "stratum": "split",
+    "country_iso3": "NGA",
+    "names": [
+      "Mines Inspectorate Department (MID)",
+      "Mining Inspectorate Division"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|NGA|pair|14-18",
+    "stratum": "split",
+    "country_iso3": "NGA",
+    "names": [
+      "Mines inspectorate department (MID)",
+      "Mining Inspectorate Division"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|PER|pair|7-8",
+    "stratum": "split",
+    "country_iso3": "PER",
+    "names": [
+      "Ministerio de Energía y Minas (MINEM)",
+      "Ministerio de Minas"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|SLB|pair|3-4",
+    "stratum": "split",
+    "country_iso3": "SLB",
+    "names": [
+      "Ministry of Commerce, Industry and Employment",
+      "Ministry of Commerce, Industry, Labour and Immigration"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|SLE|disp|6",
+    "stratum": "disposition",
+    "country_iso3": "SLE",
+    "names": [
+      "District Council & Chiefdom"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|SLE|disp|7",
+    "stratum": "disposition",
+    "country_iso3": "SLE",
+    "names": [
+      "District Council, Chiefdom council Paramount Chiefs, Constituency development"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|SLE|disp|9",
+    "stratum": "disposition",
+    "country_iso3": "SLE",
+    "names": [
+      "District Councils/Chiefdom"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|SLE|disp|10",
+    "stratum": "disposition",
+    "country_iso3": "SLE",
+    "names": [
+      "District  Councils/Chiefdoms"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|SLE|disp|11",
+    "stratum": "disposition",
+    "country_iso3": "SLE",
+    "names": [
+      "District Councils/Chiefdoms"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|SYC|disp|11",
+    "stratum": "disposition",
+    "country_iso3": "SYC",
+    "names": [
+      "THE ASSOCIATION FOR THE EXTRACTIVE INDUSTRIES TRANSPARENCY INITIATIVE (EITI)"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|TJK|disp|3",
+    "stratum": "disposition",
+    "country_iso3": "TJK",
+    "names": [
+      "Individuals and legal entities / физические и юридические лица"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|TLS|disp|7",
+    "stratum": "disposition",
+    "country_iso3": "TLS",
+    "names": [
+      "Ministry of Finance of Timor Leste (NDPMR)"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "gov_entity|TZA|pair|23-24",
+    "stratum": "split",
+    "country_iso3": "TZA",
+    "names": [
+      "Ministry of Finance and Planning",
+      "Ministry of Finance (MoF)"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|110-111",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "Clearwell Qry Plant Agri&Recyc",
+      "Clearwell Qry Plant Basic/Wayl"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|123-185",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "Gas Pipeline - Seabed rental Rough field",
+      "Pipeline Lease - Rough"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|132-135",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "Hydrocarbon Pipeline - Leman",
+      "Hydrocarbon Pipeline - Leman Field (1)"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|134-135",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "Hydrocarbon Pipeline - Leman Field",
+      "Hydrocarbon Pipeline - Leman Field (1)"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|151-153",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "Newport Sand Wharf Berth, Rvr Usk",
+      "Newport Wharf / Rvr Usk nr Caldicot Level"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|151-193",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "Newport Sand Wharf Berth, Rvr Usk",
+      "Rvr Usk nr Caldicot Level"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|151-208",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "Newport Sand Wharf Berth, Rvr Usk",
+      "Wharf, Rvr Usk nr Caldicot Level"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|176-181",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "P1230 Breagh Pipeline Lease",
+      "Pipeline Lease - Breagh"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|176-182",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "P1230 Breagh Pipeline Lease",
+      "Pipeline Lease - Breagh Field Pipeline"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|197-199",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "Stowe Hill Cert/Surf Rnt & Roy",
+      "Stowe Hill Option Area"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|197-200",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "Stowe Hill Cert/Surf Rnt & Roy",
+      "Stowe Hill Quarry"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|198-199",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "Stowe Hill Cert/Surf Royalties",
+      "Stowe Hill Option Area"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|198-200",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "Stowe Hill Cert/Surf Royalties",
+      "Stowe Hill Quarry"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|GBR|pair|199-200",
+    "stratum": "split",
+    "country_iso3": "GBR",
+    "names": [
+      "Stowe Hill Option Area",
+      "Stowe Hill Quarry"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|HND|disp|0",
+    "stratum": "disposition",
+    "country_iso3": "HND",
+    "names": [
+      "Pacific Free Zone"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|MNG|pair|14-58",
+    "stratum": "split",
+    "country_iso3": "MNG",
+    "names": [
+      "Clarification of feaibility study for underground use of ore bodies I, II and X of the main gold deposit of Tsagaan tsahir mountain located in the area of Bayan-Ovoo Sum, Bayankhongor province, ore beneficiation by gravity-hydrometallurgical method 3",
+      "Tsagaan tsakhiur mining"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|MNG|pair|42-43",
+    "stratum": "split",
+    "country_iso3": "MNG",
+    "names": [
+      "Nalaikh mine's eastern wing, usage of mud mining",
+      "Nalaikh’s mine usage of east side clay deposit"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|NLD|disp|2",
+    "stratum": "disposition",
+    "country_iso3": "NLD",
+    "names": [
+      "APP RET-35031 GEWIJZIGD WP COLLENDOORN"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|NLD|disp|3",
+    "stratum": "disposition",
+    "country_iso3": "NLD",
+    "names": [
+      "APP RET-37008 BOTLEK III SPLITSING BOTLEK-IV+BREED"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|NLD|disp|4",
+    "stratum": "disposition",
+    "country_iso3": "NLD",
+    "names": [
+      "APP RETRIBUTIES RET-43003 MIDDELIE-300"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|NLD|disp|5",
+    "stratum": "disposition",
+    "country_iso3": "NLD",
+    "names": [
+      "APP RETRIBUTIES RET-43005 SCHOONEBEEK-109"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|NLD|disp|6",
+    "stratum": "disposition",
+    "country_iso3": "NLD",
+    "names": [
+      "APP RETRIBUTIES RET-44001 BOTLEK-1"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|NLD|disp|7",
+    "stratum": "disposition",
+    "country_iso3": "NLD",
+    "names": [
+      "APP RETRIBUTIES RET-45021 SCHOONEBEEK-350"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|NLD|disp|8",
+    "stratum": "disposition",
+    "country_iso3": "NLD",
+    "names": [
+      "APP RETRIBUTIES RET-46014 Munnekezijl"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|NLD|disp|9",
+    "stratum": "disposition",
+    "country_iso3": "NLD",
+    "names": [
+      "APP RETRIBUTIES RET-47005 BEDUM"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|NLD|disp|10",
+    "stratum": "disposition",
+    "country_iso3": "NLD",
+    "names": [
+      "APP RETRIBUTIES RET-48006 SCH WKC/OBI"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|NLD|disp|13",
+    "stratum": "disposition",
+    "country_iso3": "NLD",
+    "names": [
+      "Buiten werking zijnde MBW"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|PHL|pair|31-47",
+    "stratum": "split",
+    "country_iso3": "PHL",
+    "names": [
+      "Malampaya Deepwater Gas-to-Power Project",
+      "SC 38 Malampaya Gas to Field Project"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|PHL|pair|47-48",
+    "stratum": "split",
+    "country_iso3": "PHL",
+    "names": [
+      "SC 38 Malampaya Gas to Field Project",
+      "SC 38 Malampaya Gas to Power Project"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|TCD|pair|12-13",
+    "stratum": "split",
+    "country_iso3": "TCD",
+    "names": [
+      "JIA HE ENRG RES/CPP 2018",
+      "Jia He International Petrolium - CPP 09-2018"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|TCD|pair|21-22",
+    "stratum": "split",
+    "country_iso3": "TCD",
+    "names": [
+      "Mimosa CNPCI Convention 1999",
+      "Mimosa CNPCI CPP 2014"
+    ],
+    "machine_verdict": "different",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|TCD|disp|3",
+    "stratum": "disposition",
+    "country_iso3": "TCD",
+    "names": [
+      "CNPCI/Convention 1999/Convention 2002/CPP 2014"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|TCD|disp|11",
+    "stratum": "disposition",
+    "country_iso3": "TCD",
+    "names": [
+      "GRIFFITHS ENERGY DOH/CPP 2011"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|TCD|disp|27",
+    "stratum": "disposition",
+    "country_iso3": "TCD",
+    "names": [
+      "PSC CNPCI CPP 2014"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|TCD|disp|28",
+    "stratum": "disposition",
+    "country_iso3": "TCD",
+    "names": [
+      "PSC PCM CPP 2011"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
+  },
+  {
+    "item_id": "project|TCD|disp|30",
+    "stratum": "disposition",
+    "country_iso3": "TCD",
+    "names": [
+      "REGALISPETROLEUM Group TCA International SA (GTI)/CPP 2012"
+    ],
+    "machine_verdict": "entity",
+    "machine_detail": null
   }
 ]
