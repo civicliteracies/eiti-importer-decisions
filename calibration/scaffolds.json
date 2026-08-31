@@ -3679,7 +3679,12 @@
       "Other Govt. Agency"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        0
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|ARM|disp|5",
@@ -3689,7 +3694,12 @@
       "Tax Revenue Authority"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        5
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|BFA|disp|20",
@@ -3699,7 +3709,12 @@
       "Frais de prestation BUMIGEB"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        20
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|CIV|disp|1",
@@ -3709,7 +3724,12 @@
       "Compte de Rehabilitation"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        1
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|COD|disp|18",
@@ -3719,7 +3739,12 @@
       "Direction des Recettes Provinciales"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        18
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|COD|disp|19",
@@ -3729,7 +3754,12 @@
       "Direction des Recettes Provinciales (DRP)"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        19
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|COD|disp|20",
@@ -3739,7 +3769,12 @@
       "Direction des RecettesProvinciales"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        20
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|GHA|pair|19-20",
@@ -3750,7 +3785,13 @@
       "Ghana National Petroleum Commission"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        19,
+        20
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|GIN|disp|45",
@@ -3760,7 +3801,12 @@
       "Entreprises en declaration unilaterale"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        45
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|IDN|disp|9",
@@ -3770,7 +3816,12 @@
       "Local Community"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        9
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|IRQ|disp|17",
@@ -3780,7 +3831,12 @@
       "Ministry of Finance - General Commission of Tax (through the Ministry of Oil)"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        17
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|KAZ|disp|13",
@@ -3790,7 +3846,12 @@
       "Revenue authority"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        13
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|KGZ|disp|1",
@@ -3800,7 +3861,12 @@
       "Revenue authority"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        1
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|KGZ|disp|19",
@@ -3810,7 +3876,12 @@
       "Налоговый орган"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        19
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MDG|pair|0-50",
@@ -3821,7 +3892,13 @@
       "Domaine"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        0,
+        50
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MDG|pair|1-50",
@@ -3832,7 +3909,13 @@
       "Domaine"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        1,
+        50
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MDG|pair|8-55",
@@ -3843,7 +3926,13 @@
       "Office Malgache d'Etude et de Regulation des Telecommunications"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        8,
+        55
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MDG|pair|8-56",
@@ -3854,7 +3943,13 @@
       "Office Malgache d'Etude et de Régulation des Télécommunications"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        8,
+        56
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MDG|disp|6",
@@ -3864,7 +3959,12 @@
       "Associes / Actionnaires"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        6
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MDG|disp|7",
@@ -3874,7 +3974,12 @@
       "Associés / Actionnaires"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        7
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MDG|disp|28",
@@ -3884,7 +3989,12 @@
       "Collectivites Territoriales Decentralisees, Association, ONG"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        28
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MDG|disp|62",
@@ -3894,7 +4004,12 @@
       "Organisation Sanitaire"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        62
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MDG|disp|63",
@@ -3904,7 +4019,12 @@
       "Organisation Sanitaire Inter Entreprise"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        63
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MDG|disp|65",
@@ -3914,7 +4034,12 @@
       "Port"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        65
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MLI|pair|15-17",
@@ -3925,7 +4050,13 @@
       "Direction Nationale des Domaines et du Cadastre (DNDC)"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        15,
+        17
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MLI|pair|16-17",
@@ -3936,7 +4067,13 @@
       "Direction Nationale des Domaines et du Cadastre (DNDC)"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        16,
+        17
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MNG|pair|2-3",
@@ -3947,7 +4084,13 @@
       "Customs Office"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        2,
+        3
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MNG|pair|3-11",
@@ -3958,7 +4101,13 @@
       "General Customs Administration of Mongolia"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        3,
+        11
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MNG|pair|3-55",
@@ -3969,7 +4118,13 @@
       "Mongolian Customs General Administration"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        3,
+        55
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MNG|disp|5",
@@ -3979,7 +4134,12 @@
       "Donations and supports received by government entities"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        5
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MNG|disp|9",
@@ -3989,7 +4149,12 @@
       "General Authority for Customs and Taxation"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        9
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|MRT|disp|0",
@@ -3999,7 +4164,12 @@
       "Autre entité de l’État"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        0
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|NER|disp|12",
@@ -4009,7 +4179,12 @@
       "Forces de Défense et de Sécurité (FDS)"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        12
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|NGA|pair|12-18",
@@ -4020,7 +4195,13 @@
       "Mining Inspectorate Division"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        12,
+        18
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|NGA|pair|13-18",
@@ -4031,7 +4212,13 @@
       "Mining Inspectorate Division"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        13,
+        18
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|NGA|pair|14-18",
@@ -4042,7 +4229,13 @@
       "Mining Inspectorate Division"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        14,
+        18
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|PER|pair|7-8",
@@ -4053,7 +4246,13 @@
       "Ministerio de Minas"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        7,
+        8
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|SLB|pair|3-4",
@@ -4064,7 +4263,13 @@
       "Ministry of Commerce, Industry, Labour and Immigration"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        3,
+        4
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|SLE|disp|6",
@@ -4074,7 +4279,12 @@
       "District Council & Chiefdom"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        6
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|SLE|disp|7",
@@ -4084,7 +4294,12 @@
       "District Council, Chiefdom council Paramount Chiefs, Constituency development"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        7
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|SLE|disp|9",
@@ -4094,7 +4309,12 @@
       "District Councils/Chiefdom"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        9
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|SLE|disp|10",
@@ -4104,7 +4324,12 @@
       "District  Councils/Chiefdoms"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        10
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|SLE|disp|11",
@@ -4114,7 +4339,12 @@
       "District Councils/Chiefdoms"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        11
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|SYC|disp|11",
@@ -4124,7 +4354,12 @@
       "THE ASSOCIATION FOR THE EXTRACTIVE INDUSTRIES TRANSPARENCY INITIATIVE (EITI)"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        11
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|TJK|disp|3",
@@ -4134,7 +4369,12 @@
       "Individuals and legal entities / физические и юридические лица"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        3
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|TLS|disp|7",
@@ -4144,7 +4384,12 @@
       "Ministry of Finance of Timor Leste (NDPMR)"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        7
+      ]
+    ]
   },
   {
     "item_id": "gov_entity|TZA|pair|23-24",
@@ -4155,7 +4400,13 @@
       "Ministry of Finance (MoF)"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        23,
+        24
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|110-111",
@@ -4166,7 +4417,13 @@
       "Clearwell Qry Plant Basic/Wayl"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        110,
+        111
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|123-185",
@@ -4177,7 +4434,13 @@
       "Pipeline Lease - Rough"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        123,
+        185
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|132-135",
@@ -4188,7 +4451,13 @@
       "Hydrocarbon Pipeline - Leman Field (1)"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        132,
+        135
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|134-135",
@@ -4199,7 +4468,13 @@
       "Hydrocarbon Pipeline - Leman Field (1)"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        134,
+        135
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|151-153",
@@ -4210,7 +4485,13 @@
       "Newport Wharf / Rvr Usk nr Caldicot Level"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        151,
+        153
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|151-193",
@@ -4221,7 +4502,13 @@
       "Rvr Usk nr Caldicot Level"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        151,
+        193
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|151-208",
@@ -4232,7 +4519,13 @@
       "Wharf, Rvr Usk nr Caldicot Level"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        151,
+        208
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|176-181",
@@ -4243,7 +4536,13 @@
       "Pipeline Lease - Breagh"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        176,
+        181
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|176-182",
@@ -4254,7 +4553,13 @@
       "Pipeline Lease - Breagh Field Pipeline"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        176,
+        182
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|197-199",
@@ -4265,7 +4570,13 @@
       "Stowe Hill Option Area"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        197,
+        199
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|197-200",
@@ -4276,7 +4587,13 @@
       "Stowe Hill Quarry"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        197,
+        200
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|198-199",
@@ -4287,7 +4604,13 @@
       "Stowe Hill Option Area"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        198,
+        199
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|198-200",
@@ -4298,7 +4621,13 @@
       "Stowe Hill Quarry"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        198,
+        200
+      ]
+    ]
   },
   {
     "item_id": "project|GBR|pair|199-200",
@@ -4309,7 +4638,13 @@
       "Stowe Hill Quarry"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        199,
+        200
+      ]
+    ]
   },
   {
     "item_id": "project|HND|disp|0",
@@ -4319,7 +4654,12 @@
       "Pacific Free Zone"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        0
+      ]
+    ]
   },
   {
     "item_id": "project|MNG|pair|14-58",
@@ -4330,7 +4670,13 @@
       "Tsagaan tsakhiur mining"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        14,
+        58
+      ]
+    ]
   },
   {
     "item_id": "project|MNG|pair|42-43",
@@ -4341,7 +4687,13 @@
       "Nalaikh’s mine usage of east side clay deposit"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        42,
+        43
+      ]
+    ]
   },
   {
     "item_id": "project|NLD|disp|2",
@@ -4351,7 +4703,12 @@
       "APP RET-35031 GEWIJZIGD WP COLLENDOORN"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        2
+      ]
+    ]
   },
   {
     "item_id": "project|NLD|disp|3",
@@ -4361,7 +4718,12 @@
       "APP RET-37008 BOTLEK III SPLITSING BOTLEK-IV+BREED"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        3
+      ]
+    ]
   },
   {
     "item_id": "project|NLD|disp|4",
@@ -4371,7 +4733,12 @@
       "APP RETRIBUTIES RET-43003 MIDDELIE-300"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        4
+      ]
+    ]
   },
   {
     "item_id": "project|NLD|disp|5",
@@ -4381,7 +4748,12 @@
       "APP RETRIBUTIES RET-43005 SCHOONEBEEK-109"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        5
+      ]
+    ]
   },
   {
     "item_id": "project|NLD|disp|6",
@@ -4391,7 +4763,12 @@
       "APP RETRIBUTIES RET-44001 BOTLEK-1"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        6
+      ]
+    ]
   },
   {
     "item_id": "project|NLD|disp|7",
@@ -4401,7 +4778,12 @@
       "APP RETRIBUTIES RET-45021 SCHOONEBEEK-350"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        7
+      ]
+    ]
   },
   {
     "item_id": "project|NLD|disp|8",
@@ -4411,7 +4793,12 @@
       "APP RETRIBUTIES RET-46014 Munnekezijl"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        8
+      ]
+    ]
   },
   {
     "item_id": "project|NLD|disp|9",
@@ -4421,7 +4808,12 @@
       "APP RETRIBUTIES RET-47005 BEDUM"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        9
+      ]
+    ]
   },
   {
     "item_id": "project|NLD|disp|10",
@@ -4431,7 +4823,12 @@
       "APP RETRIBUTIES RET-48006 SCH WKC/OBI"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        10
+      ]
+    ]
   },
   {
     "item_id": "project|NLD|disp|13",
@@ -4441,7 +4838,12 @@
       "Buiten werking zijnde MBW"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        13
+      ]
+    ]
   },
   {
     "item_id": "project|PHL|pair|31-47",
@@ -4452,7 +4854,13 @@
       "SC 38 Malampaya Gas to Field Project"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        31,
+        47
+      ]
+    ]
   },
   {
     "item_id": "project|PHL|pair|47-48",
@@ -4463,7 +4871,13 @@
       "SC 38 Malampaya Gas to Power Project"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        47,
+        48
+      ]
+    ]
   },
   {
     "item_id": "project|TCD|pair|12-13",
@@ -4474,7 +4888,13 @@
       "Jia He International Petrolium - CPP 09-2018"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        12,
+        13
+      ]
+    ]
   },
   {
     "item_id": "project|TCD|pair|21-22",
@@ -4485,7 +4905,13 @@
       "Mimosa CNPCI CPP 2014"
     ],
     "machine_verdict": "different",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        21,
+        22
+      ]
+    ]
   },
   {
     "item_id": "project|TCD|disp|3",
@@ -4495,7 +4921,12 @@
       "CNPCI/Convention 1999/Convention 2002/CPP 2014"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        3
+      ]
+    ]
   },
   {
     "item_id": "project|TCD|disp|11",
@@ -4505,7 +4936,12 @@
       "GRIFFITHS ENERGY DOH/CPP 2011"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        11
+      ]
+    ]
   },
   {
     "item_id": "project|TCD|disp|27",
@@ -4515,7 +4951,12 @@
       "PSC CNPCI CPP 2014"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        27
+      ]
+    ]
   },
   {
     "item_id": "project|TCD|disp|28",
@@ -4525,7 +4966,12 @@
       "PSC PCM CPP 2011"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        28
+      ]
+    ]
   },
   {
     "item_id": "project|TCD|disp|30",
@@ -4535,6 +4981,11 @@
       "REGALISPETROLEUM Group TCA International SA (GTI)/CPP 2012"
     ],
     "machine_verdict": "entity",
-    "machine_detail": null
+    "machine_detail": null,
+    "expansion": [
+      [
+        30
+      ]
+    ]
   }
 ]

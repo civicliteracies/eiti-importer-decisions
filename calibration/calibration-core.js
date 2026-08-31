@@ -341,6 +341,16 @@
     return acc;
   }
 
+  // The campaign id to stamp on a verdict file, or "" for a calibration bucket. Contested verdict
+  // files carry the contested campaign id so ingest (publish_contested_review.py) can refuse verdicts
+  // reviewed against a different run's scaffolds — their item ids index a different run's members.
+  // Calibration buckets ("{stratum}-NN") are never stamped; only "contested-" buckets are.
+  /** @param {string} bucketId @param {string} contestedCampaignId @returns {string} */
+  function contestedCampaignStamp(bucketId, contestedCampaignId) {
+    var isContested = typeof bucketId === "string" && bucketId.indexOf("contested-") === 0;
+    return isContested && contestedCampaignId ? contestedCampaignId : "";
+  }
+
   // ---- single-active-session presence (a capacity-1 claim-lease keyed by sessionId) ----------------
   // The cross-browser "who is the designated active writer for this name" record. Lazy: refreshed
   // only on activity, and NEVER auto-claimed by a non-holder — a live holder is displaced only by an
@@ -535,6 +545,7 @@
     release: release,
     complete: complete,
     unionVerdicts: unionVerdicts,
+    contestedCampaignStamp: contestedCampaignStamp,
     classifyError: classifyError,
     isRetryable: isRetryable,
     activeSession: activeSession,

@@ -253,7 +253,10 @@
         var decisions = C.unionVerdicts({}, base.decisions); // clone + normalize; never mutate the threaded snapshot in place
         var now = Date.now();
         Object.keys(newDecisions).forEach(function (id) { decisions[id] = { verdict: newDecisions[id], timestamp: now }; });
+        /** @type {{reviewer:string, bucket_id:string, decisions:any, campaign_id?:string}} */
         var payload = { reviewer: reviewer, bucket_id: bucketId, decisions: decisions };
+        var stamp = C.contestedCampaignStamp(bucketId, CONTESTED_CAMPAIGN_ID);
+        if (stamp) payload.campaign_id = stamp; // contested files bind to the campaign; calibration files don't
         return ghPut(path, payload, base.sha).then(function (r) { return { sha: r.sha, decisions: decisions }; });
       });
     }, tries == null ? MAX_TRIES : tries, function (e) { if (e && e.kind === "CAS") snapshot = null; });
@@ -337,6 +340,9 @@
   /** @type {any[]} */ var SCAFFOLDS = [];
   /** @type {import("./calibration-core.js").Bucket[]} */ var BUCKETS = [];
   /** @type {any} */ var MANIFEST = {};
+  // Stamped onto contested verdict files so ingest can refuse verdicts reviewed against a different
+  // run's scaffolds (set from the manifest at boot; "" for a calibration-only campaign).
+  /** @type {string} */ var CONTESTED_CAMPAIGN_ID = "";
   /** @type {Record<string, any>} */ var ITEMS_BY_ID = {};
   var state = C ? C.emptyState() : { roster: [], buckets: {} };
   var reviewer = LS ? (LS.getItem("calib:reviewer") || "") : "";
@@ -1035,6 +1041,7 @@
       fetch("manifest.json").then(function (r) { if (!r.ok) throw new Error("manifest.json → " + r.status); return r.json(); }),
     ]).then(function (res) {
       SCAFFOLDS = res[0]; BUCKETS = res[1]; MANIFEST = res[2];
+      CONTESTED_CAMPAIGN_ID = (MANIFEST && MANIFEST.contested_campaign_id) || "";
       SCAFFOLDS.forEach(function (s) { ITEMS_BY_ID[s.item_id] = s; });
       return authFailed ? null : refreshState().catch(function (e) {
         // Coordination state failed to load — surface it and stop. An empty board would show every
