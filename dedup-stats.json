@@ -1,0 +1,126 @@
+{
+  "base_rate": {
+    "avg_distinct_names": 1.3,
+    "single_pct": 81,
+    "single_spelling": 11473,
+    "varied": 2681,
+    "varied_pct": 19
+  },
+  "extremes": {
+    "most_countries": {
+      "canonical": "Chevron",
+      "countries": [
+        "AGO",
+        "COG",
+        "GBR",
+        "IRQ",
+        "LBR",
+        "SLE",
+        "USA"
+      ],
+      "distinct_names": 3,
+      "mentions": 33,
+      "spellings": [
+        "CHEVRON",
+        "CHEVRON CORPORATION",
+        "Chevron"
+      ],
+      "type": "company",
+      "type_label": "companies"
+    },
+    "most_mentioned": {
+      "canonical": "NAM",
+      "countries": [
+        "NLD"
+      ],
+      "distinct_names": 3,
+      "mentions": 2461,
+      "spellings": [
+        "NAM",
+        "Nederlandse Aardolie Maatschappij B.V.",
+        "Nederlandse Aardolie Maatschappij BV (NAM)"
+      ],
+      "type": "company",
+      "type_label": "companies"
+    },
+    "most_names": {
+      "canonical": "Direction Generale des Recettes Administratives (DGRAD)",
+      "countries": [
+        "COD"
+      ],
+      "distinct_names": 9,
+      "mentions": 591,
+      "spellings": [
+        "DGRAD - Direction Generale des Recettes Administratives, Judiciaires, Domaniales et de Participation",
+        "DGRAD - Direction Générale des Recettes Administratives, Judiciaires, Domaniales et de Participation",
+        "DGRAD - Direction Générale des Recettes Administratives, Participations, Judiciaires et Domaniales",
+        "Direction  Générale des Recettes Domaniales, Judiciaires et de Participation (DGRAD)",
+        "Direction Generale des Recettes Administratives (DGRAD)",
+        "Direction Generale des Recettes Administratives, Judiciaires, Domaniales et de Participation (DGRAD)",
+        "Direction Generale des Recettes Domaniales, Judiciaires et de Participation (DGRAD)",
+        "Direction Generale des Recettes Domaniales, Judiciaires et de Participations (DGRAD)",
+        "Direction Générale des Recettes Administratives, Judiciaires, Domaniales et de Participation (DGRAD)"
+      ],
+      "type": "gov_entity",
+      "type_label": "government agencies"
+    }
+  },
+  "generated_from": "9bf513473a8f3e9e",
+  "hard_calls": {
+    "kept_apart": 157,
+    "multinationals": 81,
+    "splits": 119
+  },
+  "schema_version": 1,
+  "totals": {
+    "by_type": {
+      "company": {
+        "entities": 9145,
+        "label": "companies"
+      },
+      "gov_entity": {
+        "entities": 857,
+        "label": "government agencies"
+      },
+      "project": {
+        "entities": 4152,
+        "label": "projects"
+      }
+    },
+    "distinct_name_forms": 18333,
+    "entities": 14154,
+    "mentions": 154504
+  },
+  "variation_kinds": [
+    {
+      "a": "Toguna",
+      "b": "TOGUNA",
+      "key": "case",
+      "label": "Case & accents"
+    },
+    {
+      "a": "NETIANA MINING COMPANY (NMC)",
+      "b": "NETIANA MINING COMPANY(NMC)",
+      "key": "punctuation",
+      "label": "Punctuation & spacing"
+    },
+    {
+      "a": "NAM",
+      "b": "Nederlandse Aardolie Maatschappij B.V.",
+      "key": "abbreviation",
+      "label": "Abbreviation ↔ expansion"
+    },
+    {
+      "a": "DGRAD - Direction Générale des Recettes Administratives, Judiciaires, Domaniales et de Participation",
+      "b": "DGRAD - Direction Générale des Recettes Administratives, Participations, Judiciaires et Domaniales",
+      "key": "order",
+      "label": "Word order"
+    },
+    {
+      "a": "Albpetrol",
+      "b": "Albpetrol Sh.a.",
+      "key": "suffix",
+      "label": "Legal suffix"
+    }
+  ]
+}

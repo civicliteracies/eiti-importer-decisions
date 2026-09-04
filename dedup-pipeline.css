@@ -196,6 +196,99 @@ footer { margin-top: 2.2rem; padding-top: 1.1rem; border-top: 1px solid var(--ei
 footer a { color: var(--eiti-navy); text-decoration: underline; text-underline-offset: 2px; }
 footer a:hover { text-decoration-color: var(--eiti-amber); }
 
+/* ===== stats story ===== */
+.stats { margin: 2.6rem 0 0; }
+.stats[hidden] { display: none; }
+.bridge { font-size: 1.15rem; line-height: 1.6; color: var(--eiti-ink); max-width: 46rem; margin: 0 0 2.6rem; }
+.bridge b { color: var(--eiti-navy); font-weight: 700; }
+.bridge b#st-entities-inline { font-variant-numeric: tabular-nums; }
+
+.beat { margin: 0 0 clamp(3rem, 7vh, 5.5rem); }
+.beat-eyebrow { font-family: var(--eiti-mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--eiti-amber-ink); margin: 0 0 1.1rem; }
+.beat-h { font-size: clamp(1.3rem, 3.2vw, 1.95rem); font-weight: 700; letter-spacing: -.015em; color: var(--eiti-navy); margin: 0 0 1.5rem; text-wrap: balance; max-width: 26ch; }
+.beat-cap { font-size: .92rem; line-height: 1.6; color: var(--eiti-muted); margin: 1.2rem 0 0; max-width: 44rem; }
+.beat-cap.wide { max-width: 52rem; margin: 0 0 1.7rem; }
+
+/* navy beats rhyme with the hero */
+.beat-navy { background: linear-gradient(180deg, #14294f, #0e1f3d); border-radius: 16px; padding: clamp(1.8rem, 4vw, 2.8rem); box-shadow: 0 10px 34px rgba(19, 40, 86, .12); }
+.beat-navy .beat-eyebrow { color: #f6c04e; }
+
+/* Beat 1 — the fold */
+.fold { display: flex; align-items: center; gap: clamp(1rem, 4vw, 3rem); flex-wrap: wrap; }
+.fold-side { display: flex; flex-direction: column; }
+.fold-num { font-size: clamp(2.4rem, 7vw, 4.2rem); font-weight: 800; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; color: #fff; }
+.fold-lbl { font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; color: #b9c6de; margin-top: .55rem; }
+.fold-arrow { color: var(--eiti-amber); flex: none; } .fold-arrow svg { width: 54px; height: 30px; display: block; }
+.typebar { display: flex; height: 34px; border-radius: 9px; overflow: hidden; margin-top: 2rem; gap: 2px; }
+.seg { min-width: 3px; }
+.seg-co { background: var(--co); } .seg-gov { background: var(--gov); } .seg-prj { background: var(--prj); }
+/* the counts live here, always visible — never truncated by a thin segment on a narrow screen */
+.typebar-key { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; margin-top: 1rem; }
+.tk-item { display: inline-flex; align-items: center; gap: .5rem; font-size: .82rem; color: #dbe3f2; }
+.tk-sw { width: 13px; height: 13px; border-radius: 3px; flex: none; }
+
+/* Beat 2 — the honest 10×10 waffle (fixed-size cells so it never collapses inside the flex row) */
+.waffle { display: grid; grid-template-columns: repeat(10, 26px); gap: 5px; flex: none; }
+@media (max-width: 26rem) { .waffle { grid-template-columns: repeat(10, 1fr); width: 100%; } }
+.cell { aspect-ratio: 1; border-radius: 3px; }
+.cell.one { border: 1.5px solid #7e8798; background: transparent; }
+.cell.vary { background: var(--eiti-amber); border: 1.5px solid var(--eiti-amber-ink); }
+.waffle-wrap { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1.4rem 2rem; }
+.waffle-key { display: flex; flex-direction: column; gap: .5rem; font-size: .8rem; color: var(--eiti-muted); }
+.waffle-key span { display: inline-flex; align-items: center; gap: .5rem; }
+.waffle-key .k { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.waffle-key .k.one { border: 1.5px solid #7e8798; }
+.waffle-key .k.vary { background: var(--eiti-amber); border: 1.5px solid var(--eiti-amber-ink); }
+
+/* shared spelling chips (the hero's atom, reused) */
+.s-chip { font-family: var(--eiti-mono); font-size: .76rem; padding: .22rem .5rem; border-radius: 6px; background: #eef2f8; border: 1px solid #d4dae4; color: var(--eiti-ink); }
+.s-chip .d { background: rgba(246, 167, 10, .34); border-radius: 3px; color: #6b4a08; font-weight: 700; padding: 0 1px; }
+.beat-navy .s-chip { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .16); color: #d7e2f4; }
+.beat-navy .s-chip .d { background: rgba(246, 167, 10, .34); color: #ffd98a; }
+.s-arrow { color: var(--eiti-amber); font-weight: 700; font-size: 1.1rem; }
+.s-badge { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--eiti-amber); color: #14294f; font-weight: 700; font-size: .8rem; }
+
+/* Beat 3 — record cards (on navy) */
+.records { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+.record { background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .14); border-radius: 12px; padding: 1.1rem 1.2rem; }
+.rec-eyebrow { font-family: var(--eiti-mono); font-size: .66rem; letter-spacing: .1em; text-transform: uppercase; color: #f6c04e; margin: 0 0 .55rem; }
+.rec-num { margin: 0; line-height: 1; }
+.rec-n { font-size: 2.3rem; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.rec-u { font-size: .8rem; color: #b9c6de; }
+.rec-name { margin: .45rem 0 .7rem; font-size: .86rem; color: #eaf0fa; }
+.rec-countries { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .75rem; }
+.cc { font-family: var(--eiti-mono); font-size: .64rem; letter-spacing: .05em; padding: .12rem .4rem; border-radius: 4px; background: rgba(255, 255, 255, .1); color: #cdd8ee; }
+.rec-forms { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+
+/* Beat 4 — typology rows, each a mini convergence */
+.typology { display: grid; gap: 0; }
+.typ-row { display: grid; grid-template-columns: 12rem 1fr; gap: .6rem 1.2rem; align-items: center; padding: .9rem 0; border-top: 1px solid var(--eiti-border-subtle); }
+.typ-row:first-child { border-top: none; }
+.typ-lab { font-family: var(--eiti-mono); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--eiti-navy); font-weight: 600; }
+.typ-forms { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
+@media (max-width: 40rem) { .typ-row { grid-template-columns: 1fr; gap: .5rem; } }
+
+/* Beat 5 — hard calls */
+.hardcalls { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+.hard { border: 1px solid var(--eiti-border-subtle); border-left: 3px solid var(--eiti-amber); border-radius: 10px; padding: 1.1rem 1.2rem; background: var(--eiti-surface); }
+.hard-glyph { font-family: var(--eiti-mono); font-size: 1.5rem; color: var(--eiti-amber-ink); line-height: 1; }
+.hard-num { font-size: 2rem; font-weight: 800; color: var(--eiti-navy); margin: .35rem 0 0; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.hard-head { font-size: .92rem; font-weight: 600; color: var(--eiti-navy); margin: .25rem 0 .35rem; }
+.hard-gloss { font-size: .84rem; line-height: 1.5; color: var(--eiti-muted); margin: 0; }
+
+/* handoff into the DAG */
+.handoff { text-align: center; max-width: 42rem; margin: 1rem auto 1.6rem; }
+.handoff h2 { border: none; padding: 0; margin: 0 0 .5rem; font-size: 1.4rem; font-weight: 700; letter-spacing: -.01em; text-transform: none; color: var(--eiti-navy); }
+.handoff p { font-size: .95rem; line-height: 1.6; color: var(--eiti-muted); margin: 0; }
+.handoff b { color: var(--eiti-navy); }
+
+/* reveal — enhancement only, gated behind .anim (added by JS when an observer is available) */
+#stats.anim .beat { opacity: 0; transform: translateY(14px); transition: opacity .6s ease, transform .6s ease; }
+#stats.anim .beat.in-view { opacity: 1; transform: none; }
+#stats.anim .waffle .cell { opacity: 0; transform: scale(.55); transition: opacity .3s ease, transform .3s ease; }
+#stats.anim .waffle .cell.lit { opacity: 1; transform: none; }
+
 @media (prefers-reduced-motion: reduce) {
   .tagname, .hero-arrow, .hero-entity, .node { animation: none; opacity: 1; transform: none; }
+  #stats.anim .beat, #stats.anim .waffle .cell { opacity: 1; transform: none; transition: none; }
 }

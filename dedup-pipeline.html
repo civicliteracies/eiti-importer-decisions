@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none';">
   <title>EITI Data Importer — Pipeline</title>
-  <meta name="description" content="How the deduplication pipeline turns the many ways one organisation is written across EITI disclosures into a single canonical entity — an illustrated, interactive diagram with a plain-language walkthrough.">
+  <meta name="description" content="How the deduplication pipeline turns the many ways one organisation is written across EITI disclosures into a single canonical entity — the numbers, real examples, and an interactive diagram.">
   <link rel="icon" type="image/svg+xml" href="cli-logo.svg">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="dedup-pipeline.css">
@@ -50,13 +50,67 @@
           </span>
         </div>
       </div>
-      <p class="hero-cap">The same organisation, disclosed <b>seven different ways</b> across countries and years, resolved to <b>one identity</b> with a stable id. Do that for every company, agency, and project, and the country totals finally add up.</p>
+      <p class="hero-cap">The same organisation, disclosed <b>seven different ways</b> across countries and years, resolved to <b>one identity</b> with a stable id.</p>
     </section>
 
-    <p class="intro">The pipeline below is how that resolution happens — <b>top to bottom</b>. Every name is grouped with the ones that look like it, <b>every match is reviewed</b> before it changes anything, and the result is published as the entity list the importer reads. Drag to move around and scroll to zoom.</p>
+    <!-- ============ STATS STORY (filled by renderStats from dedup-stats.json) ============ -->
+    <section class="stats" aria-labelledby="stats-h" id="stats" hidden>
+      <h2 id="stats-h" class="sr-only">The pipeline in numbers</h2>
+      <p class="bridge">That was <b>one</b> organisation. Across every EITI disclosure, the importer does this <b id="st-entities-inline">—</b> times.</p>
 
+      <!-- Beat 1 — the fold -->
+      <div class="beat beat-navy" id="beat-fold">
+        <p class="beat-eyebrow">The fold</p>
+        <div class="fold">
+          <div class="fold-side"><span class="fold-num" data-count id="st-mentions">—</span><span class="fold-lbl">disclosed name mentions</span></div>
+          <span class="fold-arrow" aria-hidden="true"><svg viewBox="0 0 46 26" aria-hidden="true"><path d="M2 13h38" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M34 6l9 7-9 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/></svg></span>
+          <div class="fold-side"><span class="fold-num" data-count id="st-entities">—</span><span class="fold-lbl">canonical entities</span></div>
+        </div>
+        <div class="typebar" id="st-typebar" role="img" aria-label="Entities by type"></div>
+        <div class="typebar-key" id="st-typebar-key"></div>
+      </div>
+
+      <!-- Beat 2 — the base rate (the honest centrepiece) -->
+      <div class="beat" id="beat-baserate">
+        <p class="beat-eyebrow">The honest part</p>
+        <h3 class="beat-h">Most entities are written exactly one way.</h3>
+        <div class="waffle-wrap">
+          <div class="waffle" id="st-waffle" role="img" aria-label="For every 100 entities, how many are written more than one way"></div>
+          <div class="waffle-key">
+            <span><span class="k one"></span> written one way</span>
+            <span><span class="k vary"></span> written more than one way</span>
+          </div>
+        </div>
+        <p class="beat-cap" id="st-baserate-cap">—</p>
+      </div>
+
+      <!-- Beat 3 — the extremes -->
+      <div class="beat beat-navy" id="beat-extremes">
+        <p class="beat-eyebrow">The extremes</p>
+        <div class="records" id="st-records"></div>
+      </div>
+
+      <!-- Beat 4 — kinds of spelling difference -->
+      <div class="beat" id="beat-typology">
+        <p class="beat-eyebrow">Kinds of spelling difference</p>
+        <h3 class="beat-h">The same name, written five ways it drifts.</h3>
+        <div class="typology" id="st-typology"></div>
+      </div>
+
+      <!-- Beat 5 — the hard calls -->
+      <div class="beat" id="beat-hardcalls">
+        <p class="beat-eyebrow">The hard calls</p>
+        <p class="beat-cap wide">Grouping names is easy to get wrong in both directions. These calls were reviewed, not left to software alone.</p>
+        <div class="hardcalls" id="st-hardcalls"></div>
+      </div>
+    </section>
+
+    <!-- ============ handoff into the DAG ============ -->
     <section aria-labelledby="dag-h">
-      <h2 id="dag-h" class="sr-only">Pipeline diagram</h2>
+      <div class="handoff">
+        <h2 id="dag-h">Explore the full pipeline</h2>
+        <p>How does a spelling become an entity? Every resolution above runs through the steps below — <b><span id="st-steps">—</span> steps</b> across two stages. Drag to move around, scroll to zoom.</p>
+      </div>
       <div class="board">
         <div class="board-bar">
           <span class="dot a"></span><span class="dot b"></span><span class="dot c"></span>
@@ -115,212 +169,212 @@
         <path class="edge" d="M680 2276 C680 2306 460 2306 460 2336" marker-end="url(#arrow)"/>
         <path class="edge" d="M680 2276 C680 2306 900 2306 900 2336" marker-end="url(#arrow)"/>
         </g>
-        <g class="node n-src">
+        <g class="node n-src" data-kind="src">
         <rect x="290" y="22" width="360" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="336" cy="66" r="26" class="badge"/>
         <use href="#ic-docs" x="322" y="52" width="27" height="27" class="icon"/>
         <text x="378" y="58" class="head">EITI disclosure files</text>
         <text x="378" y="79" class="sub">countries · years · assessments</text>
         </g>
-        <g class="node n-src">
+        <g class="node n-src" data-kind="src">
         <rect x="840" y="22" width="340" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="886" cy="66" r="26" class="badge"/>
         <use href="#ic-globe" x="872" y="52" width="27" height="27" class="icon"/>
         <text x="928" y="58" class="head">GLEIF company registry</text>
         <text x="928" y="79" class="sub">external legal-entity grounding</text>
         </g>
-        <g class="node n-proc">
+        <g class="node n-proc" data-kind="proc">
         <rect x="500" y="146" width="360" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="546" cy="190" r="26" class="badge"/>
         <use href="#ic-extract" x="532" y="176" width="27" height="27" class="icon"/>
         <text x="588" y="182" class="head">Extract every name</text>
         <text x="588" y="203" class="sub">with the country that reported it</text>
         </g>
-        <g class="node n-proc lane-co">
+        <g class="node n-proc lane-co" data-kind="proc">
         <rect x="90" y="364" width="320" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="136" cy="408" r="26" class="badge"/>
         <use href="#ic-company" x="122" y="394" width="27" height="27" class="icon"/>
         <text x="178" y="400" class="head">Group company names</text>
         <text x="178" y="421" class="sub">that look like one firm</text>
         </g>
-        <g class="node n-rev lane-co">
+        <g class="node n-rev lane-co" data-kind="rev">
         <rect x="90" y="486" width="320" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="136" cy="530" r="26" class="badge"/>
         <use href="#ic-review" x="122" y="516" width="27" height="27" class="icon"/>
         <text x="178" y="522" class="head">One company, or several?</text>
         <text x="178" y="543" class="sub">AI proposes · people confirm</text>
         </g>
-        <g class="node n-out lane-co">
+        <g class="node n-out lane-co" data-kind="out">
         <rect x="90" y="608" width="320" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="136" cy="652" r="26" class="badge"/>
         <use href="#ic-badge" x="122" y="638" width="27" height="27" class="icon"/>
         <text x="178" y="653" class="head solo">Company entities</text>
         </g>
-        <g class="node n-proc lane-gov">
+        <g class="node n-proc lane-gov" data-kind="proc">
         <rect x="520" y="364" width="320" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="566" cy="408" r="26" class="badge"/>
         <use href="#ic-government" x="552" y="394" width="27" height="27" class="icon"/>
         <text x="608" y="400" class="head">Group agency names</text>
         <text x="608" y="421" class="sub">AI panel, country by country</text>
         </g>
-        <g class="node n-rev lane-gov">
+        <g class="node n-rev lane-gov" data-kind="rev">
         <rect x="520" y="486" width="320" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="566" cy="530" r="26" class="badge"/>
         <use href="#ic-review" x="552" y="516" width="27" height="27" class="icon"/>
         <text x="608" y="522" class="head">Certify the panel</text>
         <text x="608" y="543" class="sub">a signed-off decision</text>
         </g>
-        <g class="node n-out lane-gov">
+        <g class="node n-out lane-gov" data-kind="out">
         <rect x="520" y="608" width="320" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="566" cy="652" r="26" class="badge"/>
         <use href="#ic-badge" x="552" y="638" width="27" height="27" class="icon"/>
         <text x="608" y="653" class="head solo">Government entities</text>
         </g>
-        <g class="node n-proc lane-prj">
+        <g class="node n-proc lane-prj" data-kind="proc">
         <rect x="950" y="364" width="320" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="996" cy="408" r="26" class="badge"/>
         <use href="#ic-project" x="982" y="394" width="27" height="27" class="icon"/>
         <text x="1038" y="400" class="head">Group project names</text>
         <text x="1038" y="421" class="sub">AI panel · licence code</text>
         </g>
-        <g class="node n-rev lane-prj">
+        <g class="node n-rev lane-prj" data-kind="rev">
         <rect x="950" y="486" width="320" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="996" cy="530" r="26" class="badge"/>
         <use href="#ic-review" x="982" y="516" width="27" height="27" class="icon"/>
         <text x="1038" y="522" class="head">Certify the panel</text>
         <text x="1038" y="543" class="sub">a signed-off decision</text>
         </g>
-        <g class="node n-out lane-prj">
+        <g class="node n-out lane-prj" data-kind="out">
         <rect x="950" y="608" width="320" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="996" cy="652" r="26" class="badge"/>
         <use href="#ic-badge" x="982" y="638" width="27" height="27" class="icon"/>
         <text x="1038" y="653" class="head solo">Project entities</text>
         </g>
-        <g class="node n-proc">
+        <g class="node n-proc" data-kind="proc">
         <rect x="500" y="746" width="360" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="546" cy="790" r="26" class="badge"/>
         <use href="#ic-merge" x="532" y="776" width="27" height="27" class="icon"/>
         <text x="588" y="782" class="head">Combine the three sets</text>
         <text x="588" y="803" class="sub">one draft list of everything</text>
         </g>
-        <g class="node n-proc">
+        <g class="node n-proc" data-kind="proc">
         <rect x="490" y="888" width="380" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="536" cy="932" r="26" class="badge"/>
         <use href="#ic-split" x="522" y="918" width="27" height="27" class="icon"/>
         <text x="578" y="924" class="head">Find over-grouped entities</text>
         <text x="578" y="945" class="sub">several firms hiding under one name</text>
         </g>
-        <g class="node n-rev">
+        <g class="node n-rev" data-kind="rev">
         <rect x="500" y="1010" width="360" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="546" cy="1054" r="26" class="badge"/>
         <use href="#ic-review" x="532" y="1040" width="27" height="27" class="icon"/>
         <text x="588" y="1046" class="head">Split them apart?</text>
         <text x="588" y="1067" class="sub">reviewed before anything moves</text>
         </g>
-        <g class="node n-out">
+        <g class="node n-out" data-kind="out">
         <rect x="530" y="1132" width="300" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="576" cy="1176" r="26" class="badge"/>
         <use href="#ic-badge" x="562" y="1162" width="27" height="27" class="icon"/>
         <text x="618" y="1177" class="head solo">Cleaned entities</text>
         </g>
-        <g class="node n-proc">
+        <g class="node n-proc" data-kind="proc">
         <rect x="500" y="1274" width="360" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="546" cy="1318" r="26" class="badge"/>
         <use href="#ic-search" x="532" y="1304" width="27" height="27" class="icon"/>
         <text x="588" y="1310" class="head">Find look-alikes</text>
         <text x="588" y="1331" class="sub">names that should be one entity</text>
         </g>
-        <g class="node n-pool">
+        <g class="node n-pool" data-kind="pool">
         <rect x="16" y="1410" width="208" height="76" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="58" cy="1448" r="22" class="badge"/>
         <use href="#ic-filter" x="46" y="1436" width="23" height="23" class="icon"/>
         <text x="96" y="1440" class="head">Same country</text>
         <text x="96" y="1461" class="sub">similar names</text>
         </g>
-        <g class="node n-pool">
+        <g class="node n-pool" data-kind="pool">
         <rect x="240" y="1410" width="208" height="76" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="282" cy="1448" r="22" class="badge"/>
         <use href="#ic-filter" x="270" y="1436" width="23" height="23" class="icon"/>
         <text x="320" y="1440" class="head">Same country</text>
         <text x="320" y="1461" class="sub">acronym ↔ full name</text>
         </g>
-        <g class="node n-pool">
+        <g class="node n-pool" data-kind="pool">
         <rect x="464" y="1410" width="208" height="76" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="506" cy="1448" r="22" class="badge"/>
         <use href="#ic-filter" x="494" y="1436" width="23" height="23" class="icon"/>
         <text x="544" y="1440" class="head">Same country</text>
         <text x="544" y="1461" class="sub">bracketed variant</text>
         </g>
-        <g class="node n-pool">
+        <g class="node n-pool" data-kind="pool">
         <rect x="688" y="1410" width="208" height="76" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="730" cy="1448" r="22" class="badge"/>
         <use href="#ic-filter" x="718" y="1436" width="23" height="23" class="icon"/>
         <text x="768" y="1440" class="head">Across countries</text>
         <text x="768" y="1461" class="sub">identical name</text>
         </g>
-        <g class="node n-pool">
+        <g class="node n-pool" data-kind="pool">
         <rect x="912" y="1410" width="208" height="76" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="954" cy="1448" r="22" class="badge"/>
         <use href="#ic-filter" x="942" y="1436" width="23" height="23" class="icon"/>
         <text x="992" y="1440" class="head">Across countries</text>
         <text x="992" y="1461" class="sub">shared rare word</text>
         </g>
-        <g class="node n-pool">
+        <g class="node n-pool" data-kind="pool">
         <rect x="1136" y="1410" width="208" height="76" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="1178" cy="1448" r="22" class="badge"/>
         <use href="#ic-filter" x="1166" y="1436" width="23" height="23" class="icon"/>
         <text x="1216" y="1440" class="head">No country</text>
         <text x="1216" y="1461" class="sub">shared rare word</text>
         </g>
-        <g class="node n-rev">
+        <g class="node n-rev" data-kind="rev">
         <rect x="490" y="1536" width="380" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="536" cy="1580" r="26" class="badge"/>
         <use href="#ic-review" x="522" y="1566" width="27" height="27" class="icon"/>
         <text x="578" y="1572" class="head">Same entity, or keep apart?</text>
         <text x="578" y="1593" class="sub">every proposed pair is reviewed</text>
         </g>
-        <g class="node n-proc">
+        <g class="node n-proc" data-kind="proc">
         <rect x="490" y="1658" width="380" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="536" cy="1702" r="26" class="badge"/>
         <use href="#ic-merge" x="522" y="1688" width="27" height="27" class="icon"/>
         <text x="578" y="1694" class="head">Merge the confirmed pairs</text>
         <text x="578" y="1715" class="sub">never a parent with its subsidiary</text>
         </g>
-        <g class="node n-out">
+        <g class="node n-out" data-kind="out">
         <rect x="530" y="1780" width="300" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="576" cy="1824" r="26" class="badge"/>
         <use href="#ic-badge" x="562" y="1810" width="27" height="27" class="icon"/>
         <text x="618" y="1825" class="head solo">Refined entities</text>
         </g>
-        <g class="node n-gate">
+        <g class="node n-gate" data-kind="gate">
         <rect x="500" y="1918" width="360" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="546" cy="1962" r="26" class="badge"/>
         <use href="#ic-shield" x="532" y="1948" width="27" height="27" class="icon"/>
         <text x="588" y="1954" class="head">No duplicates remain</text>
         <text x="588" y="1975" class="sub">must be zero, or the run stops</text>
         </g>
-        <g class="node n-gate">
+        <g class="node n-gate" data-kind="gate">
         <rect x="500" y="2040" width="360" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="546" cy="2084" r="26" class="badge"/>
         <use href="#ic-shield" x="532" y="2070" width="27" height="27" class="icon"/>
         <text x="588" y="2076" class="head">Full consistency check</text>
         <text x="588" y="2097" class="sub">every step&#x27;s record verified</text>
         </g>
-        <g class="node n-out final">
+        <g class="node n-out final" data-kind="out">
         <rect x="490" y="2176" width="380" height="100" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="536" cy="2226" r="26" class="badge"/>
         <use href="#ic-publish" x="522" y="2212" width="27" height="27" class="icon"/>
         <text x="578" y="2218" class="head">Published entity list</text>
         <text x="578" y="2239" class="sub">what the importer reads</text>
         </g>
-        <g class="node n-proc">
+        <g class="node n-proc" data-kind="proc">
         <rect x="280" y="2336" width="360" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="326" cy="2380" r="26" class="badge"/>
         <use href="#ic-tag" x="312" y="2366" width="27" height="27" class="icon"/>
         <text x="368" y="2372" class="head">Names tagged on import</text>
         <text x="368" y="2393" class="sub">each disclosure linked to its entity</text>
         </g>
-        <g class="node n-proc">
+        <g class="node n-proc" data-kind="proc">
         <rect x="720" y="2336" width="360" height="88" rx="16" class="card" filter="url(#soft)"/>
         <circle cx="766" cy="2380" r="26" class="badge"/>
         <use href="#ic-check" x="752" y="2366" width="27" height="27" class="icon"/>
@@ -351,8 +405,7 @@
         <li><span class="rt">Follow it top to bottom</span>Names come in at the top and leave as a published list at the bottom. Each step takes the result of the one above and hands its own result down.</li>
         <li><span class="rt">Three lanes that never cross</span>Companies, government agencies, and projects are resolved separately. A company and a government body that are the same organisation keep <b>separate</b> identities on purpose — one is a payer, the other a recipient, and merging them would blur the money flow.</li>
         <li><span class="rt">Every match is reviewed</span>The ringed review steps are the checkpoints. The first asks <i>&ldquo;did we group one entity as several, or several as one?&rdquo;</i>; the second, in Stage&nbsp;2, asks <i>&ldquo;are these two actually the same?&rdquo;</i></li>
-        <li><span class="rt">Stage 2 is a set of filters</span>Each filter spots look-alikes a different way — similar names, an <span class="m">acronym ↔ full name</span> match, bracketed variants, the same name across countries, shared rare words — and they all flow into the <b>same</b> review and merge. A parent company and its subsidiary are always kept apart.</li>
-        <li><span class="rt">A new idea is a new filter</span>That shared review-and-merge is why a new way to spot look-alikes slots in beside the others — without rebuilding any of the earlier steps.</li>
+        <li><span class="rt">Stage 2 is a set of filters</span>Each filter spots look-alikes a different way — similar names, an <span class="m">acronym ↔ full name</span> match, bracketed variants, the same name across countries, shared rare words — and they all flow into the <b>same</b> review and merge. A new way to spot look-alikes slots in beside the others without rebuilding the earlier steps. A parent company and its subsidiary are always kept apart.</li>
       </ol>
     </section>
 
