@@ -1586,7 +1586,7 @@ Every import run also has an id of its own. The tool stamps that id on each coho
 
 **Rationale:** v1 files don't carry the named-table metadata regardless of country or year, so landmark scanning is the only path that will find anything. Building it that way also keeps v1 reading tolerant of the minor layout drift seen in real files (Gabon and CAR files truncate the "GFS Descriptions" header, for example) without coupling v1 to a feature its template never used.
 
-**Technical detail:** v1 schemas live in `packages/stores/eiti/src/eiti/parsing/schemas/v1.py` and use `HeaderSearchSchema`, `KeyValuePairsSchema`, `PivotHeaderSchema`, or `PivotTableSchema` — never `NamedTableSchema` / `NamedTableColumnsSchema`. Locator dispatch in `packages/parser/src/parser/extraction/excel_reader.py` maps `NAMED_TABLE` → `NamedTableLocator` (v2.x) and `HEADER_SEARCH` → `HeaderSearchLocator` (v1).
+**Technical detail:** v1 schemas live in `packages/stores/eiti/src/eiti/parsing/schemas/v1.py` and use `HeaderSearchSchema`, `KeyValuePairsSchema`, `PivotHeaderSchema`, or `PivotTableSchema` — never `NamedTableSchema` / `NamedTableColumnsSchema`. The grammar binder (`packages/stores/eiti/src/eiti/parsing/grammar/bind.py`) reads the tabular schemas via `_read_tables`, locating a `NamedTable`/`NamedTableColumns` header through `_start_by_named_header` (v2.x) and a `HeaderSearch` header through `_start_by_header_ratio` (v1).
 
 ### Does v1 collect data on projects and agencies?
 <!-- scenario: compare-across-versions; topic: version-differences -->
@@ -1619,7 +1619,7 @@ Every import run also has an id of its own. The tool stamps that id on each coho
 
 **Rationale:** Forcing every later step to handle the cross-tab shape would scatter v1-specific logic through reconciliation, the cleaned tables, and the dashboard. Reshaping to a row-per-payment list at the reading stage contains the version-specific shape work in one place and lets every later step stay version-agnostic.
 
-**Technical detail:** `COMPANY_REVENUE_SCHEMA_V1` and `discover_company_columns` in `packages/stores/eiti/src/eiti/parsing/schemas/v1.py`; `PivotTableLocator` and `PivotTableReader` in `packages/parser/src/parser/extraction/location_strategies.py`. Each emitted row carries `gfs_code`, `gfs_description`, `revenue_stream_name`, `government_agency` (from the row), `company_name` (from the column header on row 4), and `revenue_value` (the cell value). Company metadata (id, sector, commodities) lives in the same pivot header and is extracted separately by `COMPANY_HEADER_SCHEMA_V1` (PivotHeaderSchema) into `companies_v1`.
+**Technical detail:** `COMPANY_REVENUE_SCHEMA_V1` and `discover_company_columns` in `packages/stores/eiti/src/eiti/parsing/schemas/v1.py`; the pivot/company-matrix logic lives in `packages/stores/eiti/src/eiti/parsing/grammar/island.py`, read via the binder's `_read_pivot_table` (`grammar/bind.py`). Each emitted row carries `gfs_code`, `gfs_description`, `revenue_stream_name`, `government_agency` (from the row), `company_name` (from the column header on row 4), and `revenue_value` (the cell value). Company metadata (id, sector, commodities) lives in the same pivot header and is extracted separately by `COMPANY_HEADER_SCHEMA_V1` (PivotHeaderSchema) into `companies_v1`.
 
 ### Why does v2.0 reference internal Excel table names that don't match the data?
 <!-- scenario: compare-across-versions; topic: version-differences -->
@@ -1630,7 +1630,7 @@ Every import run also has an id of its own. The tool stamps that id on each coho
 
 **Rationale:** Renaming the Excel tables inside files the tool receives isn't an option — the .xlsx as submitted is what it is. Matching the labels exactly is the only way the tool can find the tables in the file. The cost is that internal references for v2.0 carry names that don't describe their contents, which is documented where the names appear and stays confined to v2.0.
 
-**Technical detail:** Quirky names declared in `packages/stores/eiti/src/eiti/parsing/schemas/v2p0.py` (notably `REPORTING_PROJECTS_SCHEMA_V2P0` with `table_name="Companies15"` and `COMPANY_REVENUE_SCHEMA_V2P0` with `table_name="Table10"`); routed through `packages/stores/eiti/src/eiti/stats_config.json` (`TABLE_KEYS["summary_v2.0"]` has `comp: "Table10"`, `projects: "Companies15"`) and `packages/pipeline/src/pipeline/profiles/summary_v2p0.py` (`crosscheck_entities`, `enrichment_sources`, `gfs_table`, clean-query wiring). Lookup happens in `NamedTableLocator.locate` in `packages/parser/src/parser/extraction/location_strategies.py` via `sheet.tables.get(schema.table_name)`.
+**Technical detail:** Quirky names declared in `packages/stores/eiti/src/eiti/parsing/schemas/v2p0.py` (notably `REPORTING_PROJECTS_SCHEMA_V2P0` with `table_name="Companies15"` and `COMPANY_REVENUE_SCHEMA_V2P0` with `table_name="Table10"`); routed through `packages/stores/eiti/src/eiti/stats_config.json` (`TABLE_KEYS["summary_v2.0"]` has `comp: "Table10"`, `projects: "Companies15"`) and `packages/pipeline/src/pipeline/profiles/summary_v2p0.py` (`crosscheck_entities`, `enrichment_sources`, `gfs_table`, clean-query wiring). The grammar binder locates these named tables in `_start_by_named_header` / `_read_tables` (`packages/stores/eiti/src/eiti/parsing/grammar/bind.py`), reconciled with the declared Excel table region (`sheet.tables`) that `declared_table_extents` surfaces from `packages/parser/src/parser/extraction/table_extractor.py`.
 
 ### How does the tool recover data from older or template-corrupted files?
 <!-- scenario: trust-the-data; topic: version-differences -->
@@ -1710,7 +1710,7 @@ This is a preservation move, scoped exactly like the value corrections above: it
 
 **Decision:** A present-but-empty required table (anchor found, zero rows) is distinct from an absent one (no anchor) and imports as an empty table rather than terminating the file. The declaration keeps its other tables (government revenue imports with zero companies). Because the empty table would otherwise be invisible downstream — validation drops empty tables before the mapper sees them — the parser emits an informational `LOCATED_TABLE_EMPTY` finding recording that the empty table was an observed outcome, not a silent parse failure. An absent table (no anchor at all) still blocks, unchanged.
 
-**Technical detail:** `PivotHeaderLocator.locate` (`packages/parser/src/parser/extraction/location_strategies.py`) returns an empty `TableRegion` on zero columns and `None` only when the anchor is missing; `TableExtractor` emits `LOCATED_TABLE_EMPTY` (in `_SCHEMA_DEVIATION_PARSER_CODES`, non-blocking) for any located required table that reads zero rows.
+**Technical detail:** the grammar binder's `_read_pivot_header` (`packages/stores/eiti/src/eiti/parsing/grammar/bind.py`) reads the v1 company matrix via `island.extract_matrix` (`grammar/island.py`), yielding zero rows on zero company columns while still locating the header; the binder emits `LOCATED_TABLE_EMPTY` (non-blocking `SCHEMA_DEVIATION`) for any located required table that reads zero rows.
 
 ---
 
