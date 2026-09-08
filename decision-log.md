@@ -86,6 +86,24 @@ The first section, **Pending Decisions**, lists choices we know we need to make 
 
 ---
 
+### Which ESTMA registrants do these four unresolved harvested names map to?
+<!-- scenario: trust-the-data; topic: pending-decisions -->
+
+**Situation:** The ESTMA override list attaches a Canadian ESTMA registry ID to a harvested company spelling a maintainer has vouched for. After curating every candidate the corpus could resolve from the data itself (in-country filings, corporate-family structure), four harvested names remain that cannot be attached with confidence: each fuzzy-matches several *unrelated* registrants, or a company that may not be an ESTMA registrant at all.
+
+**Question:** For each of the four names below, which ESTMA registrant — if any — is it? EITI's own knowledge of these companies can resolve what the registry alone cannot; each confirmed answer becomes one override entry.
+
+- **`Gold Corp` (Mexico)** — a generic fragment that fuzzy-matches five *different* registrants (Premier Gold, Luna Gold, Goldgroup Mining, Tarachi Gold, Leagold). Which company is this — or is it Goldcorp Inc., which is not an ESTMA registrant?
+- **`Dundee Precious Metals` (Company Assessment)** — fuzzy-matches *unrelated* registrants (Andean Precious Metals, Dundee Corporation, Quebec Precious Metals). Is Dundee Precious Metals Inc. itself an ESTMA registrant under a different spelling, or absent from the registry?
+- **`Orano Mining` (Company Assessment)** — matches only unrelated registrants (Orla Mining, Foran Mining). Does the uranium company Orano file under ESTMA at all?
+- **`Repsol` (Company Assessment, no country)** — two registrants file: Repsol Oil & Gas Canada Inc. (`E492006`) and Repsol (Colombia) Oil & Gas Ltd. (`E846187`). With no reporting country to corroborate, which entity does the bare "Repsol" denote?
+
+**Status quo:** All four remain *possible* matches (`MATCH_CANDIDATE`) — surfaced on the external-match review surface but never attached, so a headless bulk or archive import records no ESTMA ID for them. They stay unresolved until EITI confirms an identity.
+
+**Technical detail:** The curated entries live in `packages/stores/eiti/src/eiti/resources/estma/override_manifest.toml`; a confirmed name is one `[[override]]` block keyed by the recognition-folded name plus its country (or no country, for a Company Assessment global submission). See the "curated override list" entry under § 7 (Import Behavior) and ADR-076.
+
+---
+
 ## 1. Data Quality Policy
 
 ### What kinds of errors can be fixed in the tool?
@@ -2097,9 +2115,4 @@ The reviewed verdict is the only thing that acts, and it is conservative. A cell
 
 **Technical detail:** The list is a bundled manifest (`packages/stores/eiti/src/eiti/resources/estma/override_manifest.toml`), consumed inside the external-match closure exactly like the registry, so its entries are external IDs and never enter EITI identity. The loader refuses any entry that would shadow a match the tool already makes, that disambiguates a name collision with an ID outside the colliding set, or whose ID/country/name is invalid — each a load-time error, so a bad entry can't reach an import. A dead manifest emits a non-blocking `override_manifest_unavailable` observation (distinct from the registry's `source_unavailable`) and registry matching still runs. See ADR-076.
 
-**Open items — pending EITI confirmation.** After curating every candidate the corpus lets us resolve from the data (in-country filings, corporate-family structure), four harvested names remain that the tool cannot attach with confidence. They are recorded here because EITI's own knowledge of these companies can resolve them where the ESTMA registry alone cannot; each would become one override entry once confirmed.
-
-- **`Gold Corp` (Mexico)** — a generic fragment that fuzzy-matches five *different* registrants (Premier Gold, Luna Gold, Goldgroup Mining, Tarachi Gold, Leagold). Which company is this — or is it Goldcorp Inc., which is not an ESTMA registrant?
-- **`Dundee Precious Metals` (Company Assessment)** — the name fuzzy-matches *unrelated* registrants (Andean Precious Metals, Dundee Corporation, Quebec Precious Metals). Is Dundee Precious Metals Inc. itself an ESTMA registrant under a different spelling, or absent from the registry?
-- **`Orano Mining` (Company Assessment)** — matches only unrelated registrants (Orla Mining, Foran Mining). Does the uranium company Orano file under ESTMA at all?
-- **`Repsol` (Company Assessment, no country)** — two registrants file: Repsol Oil & Gas Canada Inc. (`E492006`) and Repsol (Colombia) Oil & Gas Ltd. (`E846187`). With no reporting country to corroborate, which entity does the bare Company-Assessment "Repsol" denote?
+**Open items — pending EITI confirmation.** After curating every candidate the corpus could resolve from the data, four harvested names remain that cannot be attached with confidence. They are recorded as a pending decision — see *"Which ESTMA registrants do these four unresolved harvested names map to?"* under § 0 (Pending Decisions) — because EITI's own knowledge of these companies can resolve what the ESTMA registry alone cannot; each becomes one override entry once confirmed.
