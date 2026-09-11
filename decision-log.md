@@ -300,7 +300,7 @@ One case this makes explicit is an entity named on a payment or revenue row but 
 ### How does 'Not available' / 'Not applicable' interact with list-typed cells?
 <!-- scenario: trust-the-data; topic: data-quality-policy -->
 
-**Situation:** A list-typed cell (Companies commodities, Projects affiliated companies) can carry separator-laced noise — empty tokens between commas, a stray `-` or `n/a` between two real tokens — that should not produce per-token validation findings of its own.
+**Situation:** A list-typed cell (Companies commodities, Projects affiliated companies) can carry separator-laced noise — empty tokens between commas, a stray `-` or `na` between two real tokens — that should not produce per-token validation findings of its own.
 
 **Decision:** Per-token noise is dropped silently by the parser Typer. A token that is empty/whitespace-only, a dash, or a canonical NA/NV variant is treated as no-data inside the list and produces a `NOISE_TOKEN_REMOVED` finding with `proposed_value=None` so the mapper skips writing a junction row for it. The cell as a whole — when the entire cell text is a sentinel — passes through to the field's `NotApplicable` / `NotAvailable` union arm exactly as for scalar fields, so a list-typed Companies row with `"Not applicable"` in the commodities column imports as a structural inapplicability marker, not as a one-element list of the sentinel string.
 
