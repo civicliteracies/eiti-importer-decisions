@@ -1732,6 +1732,17 @@ This is a preservation move, scoped exactly like the value corrections above: it
 
 ---
 
+### What does the tool do with a sheet it cannot parse?
+<!-- scenario: trust-the-data; topic: version-differences -->
+
+**Situation:** A targeted sheet can be present and non-empty yet not match its grammar — e.g. a localized "About" sheet whose banner and subtitle sit where the parser expects a column header. Before this change the parser gave no signal that such a sheet had even been read.
+
+**Decision:** The parser surfaces the failure as a `SHEET_UNPARSEABLE` finding naming the sheet, the labeled reason, and the cell the parse stalled on — a **non-blocking** observation (`SCHEMA_DEVIATION`), not a source-fix block. This reflects what actually happens under today's kind-blind binder: a grid-read sheet (KVP/scan/pivot — About, Contextual) still reads its data from the raw token stream regardless of the parse outcome, so the file imports its data and blocking would wrongly halt it; a tabular sheet's identifying table instead fails to locate and already surfaces the terminal `BLOCK_PARSE_FAILED`, which a block here would only duplicate. So `SHEET_UNPARSEABLE` is a grammar-*coverage* signal — "the grammar didn't recognize this sheet; look at whether it should" — rather than a data-loss gate. The right response to one is still to teach the grammar the sheet's shape (a localized variant), not to weaken it. A *resync recovery* that skips one region inside an otherwise-parsed sheet surfaces the same way, as a non-blocking `PARSE_REGION_DROPPED` observation. When the structure-aware binder (the parser-refactor epic) makes the parse outcome authoritative for the read — so an `Unparseable` sheet actually loses its tables — `SHEET_UNPARSEABLE` flips to blocking.
+
+**Technical detail:** the store's `parse_sheet` (`packages/stores/eiti/src/eiti/parsing/grammar/grammar.py`) records each sheet's error-model outcome on the workbook AST (`ParsedSheetView.findings`); `ValidatorService.validate` (`packages/parser/src/parser/validation/validator_service.py`) reads them via `parser.validation.parse_findings.collect_parse_findings` and folds one `SHEET_UNPARSEABLE` / `PARSE_REGION_DROPPED` finding per parse error into the `ParserReport`, from which they persist to `metadata_import_findings`. Both carry `_D_SCHEMA_DEVIATION` (informational, non-blocking).
+
+---
+
 ## Cross-Cutting
 
 ### How are numeric IDs from Excel handled?
