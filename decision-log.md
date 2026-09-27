@@ -1708,6 +1708,23 @@ This is a preservation move, scoped exactly like the value corrections above: it
 
 ---
 
+### What happens to the excluded-payment tables in a v2 sheet's "Additional information" section?
+<!-- scenario: trust-the-data; topic: version-differences -->
+
+**Situation:** The v2 government (Part 4) and company (Part 5) sheets carry an "Additional information" region below the reconciled table. Operators use it two ways: they list real disclosed revenues that EITI methodology excludes from the reconciled table — employee-borne taxes such as PAYE, IRPP, salary withholdings, and IUTS, listed as small tables — and they write free-text commentary. These are genuine, non-overlapping amounts (an operator's excluded-payment table can run to hundreds of millions in the national currency), not duplicates of the main table.
+
+**Decision:** Excluded-payment tables in this region are captured as queryable rows, preserved but never reconciled. When a block's columns are declared — either by a header row the operator typed above it, or by the sheet's own main revenue-table header when the block's cells line up under it — the tool types each payment into its own table (government and company kept separate, per version). These rows are deliberately kept out of the reconciliation: an excluded amount is never summed into reconciled revenue, and the company and government names on these rows never join the reconciled entity graph. They are available strictly as "disclosed but excluded" — an analyst can query what was declared here, but it cannot leak into a reconciled total.
+
+Two kinds of content stay as text rather than becoming queryable rows: genuinely unstructured blocks, where the operator gave no column structure the tool can recover without guessing which cell is the company, the stream, or the agency; and any row that states a number but names no currency. Both are preserved verbatim in the additional-info text capture, each with a finding naming the amounts left un-typed, so nothing is lost and a reviewer can see exactly what was not lifted. `Total`/aggregate rows are dropped rather than stored as if they were individual payments. Free-text commentary is preserved as text as before.
+
+Because this tier is preserved, not reconciled, a data-quality problem in one of its cells never blocks the file. When a typed excluded-payment row carries a malformed cell — an unrecognized sector, a value that is not a number, a currency the tool cannot read — the cell is recorded as a non-blocking observation and the file still imports; the operator is not forced to fix an excluded payment before their reconciled data can land. This is the opposite of the main reconciled tables, where the same malformed cell blocks for source review. The excluded tier can surface a problem, but it can never gate the reconciled data.
+
+This updates the *survives as text, not queryable* description in the disclosure-row relocation entry above (*What happens to an operator-added disclosure row that matches no Standard indicator in an archived file?*): that statement still holds for those relocated checklist rows and for prose and undeclared/no-currency content, but the region's excluded-payment tables are now queryable, preserved-not-reconciled data.
+
+**Technical detail:** The region is read off the sheet grid by `AnchoredPaymentTablesSchema` (typed payment tables) and `AnchoredRegionSchema` (the free-text remainder), which share one block classifier so the two reads never disagree about where a payment block sits. Typed rows land on the resolved-only tables `resolved_v2[_1]_additional_{gov,company}_payments` — carrying no resolved entity keys, no USD, and no business key, which is the construction guarantee that keeps them out of reconciliation. An un-typeable block or a no-currency row emits `ParserCode.ADDITIONAL_PAYMENT_NOT_TYPED` (observation channel, non-blocking) and stays in `metadata_additional_info`. A schema (`AnchoredPaymentTablesSchema`) carries `preserved_tier=True`; the row validator routes any blocking-capable field-validation code on a preserved-tier table to `ParserCode.PRESERVED_FIELD_NOT_TYPED` (observation channel) instead, so the strict types still detect the problem but never gate the file — respecting ADR-056 (disposition is intrinsic to the code) by choosing the observation code, not by re-dispositioning a blocking one. The resolved-only landing (a `ResolvedMap`, no ledger `TableMap`) is recorded in the ADR referenced from the parser docs.
+
+---
+
 ### What does the tool do with a v1 file's "Registry 2" row and registry values that aren't contract registries?
 <!-- scenario: trust-the-data; topic: version-differences -->
 
