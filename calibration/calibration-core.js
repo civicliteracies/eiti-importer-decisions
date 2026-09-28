@@ -1,4 +1,4 @@
-/* Pure coordination core for the distributed calibration page (TASK-329.06.01).
+/* Pure coordination core for the distributed calibration page.
 
    The claim-lease algebra over state.json, plus roster registration and verdict union — all pure so
    the tests can drive the laws without a browser or the GitHub API. The impure shell

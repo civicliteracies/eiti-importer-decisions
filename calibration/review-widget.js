@@ -1,4 +1,4 @@
-/* Blind-review widget for the calibration page (TASK-329.06.01).
+/* Blind-review widget for the calibration page.
 
    The per-item blind judgment, rendered by the hosted distributed page (calibration.js loads it
    under CSP script-src 'self'). Kept as its own module — not inlined into the page — so the review

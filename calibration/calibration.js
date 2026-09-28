@@ -1,4 +1,4 @@
-/* Distributed calibration page shell (TASK-329.06.01).
+/* Distributed calibration page shell.
 
    Wires the shared blind-review widget (review-widget.js) and the pure claim-lease core
    (calibration-core.js) to the GitHub Contents API. Reviewers open a link carrying a shared
