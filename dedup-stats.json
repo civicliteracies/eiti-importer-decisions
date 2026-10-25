@@ -2,8 +2,8 @@
   "base_rate": {
     "avg_distinct_names": 1.3,
     "single_pct": 81,
-    "single_spelling": 11473,
-    "varied": 2681,
+    "single_spelling": 11415,
+    "varied": 2678,
     "varied_pct": 19
   },
   "extremes": {
@@ -65,31 +65,31 @@
       "type_label": "government agencies"
     }
   },
-  "generated_from": "9cfc9b69e0dbc35b",
+  "generated_from": "62b99de70f4114da",
   "hard_calls": {
     "kept_apart": 157,
-    "multinationals": 81,
+    "multinationals": 80,
     "splits": 119
   },
   "schema_version": 1,
   "totals": {
     "by_type": {
       "company": {
-        "entities": 9145,
+        "entities": 9130,
         "label": "companies"
       },
       "gov_entity": {
-        "entities": 857,
+        "entities": 815,
         "label": "government agencies"
       },
       "project": {
-        "entities": 4152,
+        "entities": 4148,
         "label": "projects"
       }
     },
-    "distinct_name_forms": 18333,
-    "entities": 14154,
-    "mentions": 154504
+    "distinct_name_forms": 18269,
+    "entities": 14093,
+    "mentions": 154065
   },
   "variation_kinds": [
     {
