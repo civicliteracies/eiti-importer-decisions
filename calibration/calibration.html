@@ -7,6 +7,8 @@
        connect-src for the coordination reads/writes, and font-src 'self' for the shared Metropolis
        @font-face in ../style.css. The other published pages keep their strict connect-src 'self'. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://api.github.com; base-uri 'none'; form-action 'none';">
+  <!-- The page's review config (repo, paths, questions, practice set), read by calibration-boot.js. -->
+  <meta name="calibration-config" content="importer-review-config.json">
   <title>EITI Data Importer — Panel calibration</title>
   <meta name="description" content="Blind human review of the deduplication panel's unanimous decisions, to measure their accuracy.">
   <link rel="icon" type="image/svg+xml" href="../cli-logo.svg">
@@ -40,5 +42,6 @@
   <script src="review-widget.js"></script>
   <script src="calibration-core.js"></script>
   <script src="calibration.js"></script>
+  <script src="calibration-boot.js"></script>
 </body>
 </html>

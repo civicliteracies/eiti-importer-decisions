@@ -9,6 +9,13 @@
        "buckets": { "<bucket_id>": { "claimants": [{"name","ts"}], "completed_by": ["ana", ...] } },
        "sessions": { "<reviewer>": { "sessionId": "…", "ts": 0 } } }   // the designated active session per name
 
+   A bucket (buckets.json) may name `excluded_reviewers`: reviewers who may never claim it (claim
+   refuses them, bucketStatus reports "excluded", nextOpenBucket skips it). A second-round bucket
+   excludes the reviewers whose own labels it re-reviews.
+
+   A verdict cell is { verdict, detail?, timestamp }: `detail` carries the follow-up answer of a
+   two-step choice and is absent for a one-step one.
+
    The `sessions` map is the cross-browser single-active-session marker: a capacity-1 claim-lease keyed
    by sessionId with a short staleness horizon (SESSION_TTL_MS). It is refreshed lazily and NEVER
    auto-claimed over a live holder — transfer happens only via takeoverSession (the one-click take-over)
@@ -27,9 +34,11 @@
  * @typedef {{ claimants: Claimant[], completed_by: string[] }} BucketState
  * @typedef {{ sessionId: string, ts: number }} SessionRec
  * @typedef {{ roster: string[], buckets: Record<string, BucketState>, sessions?: Record<string, SessionRec> }} CoordState
- * @typedef {{ verdict: string, timestamp: number }} VerdictCell
+ * @typedef {{ verdict: string, detail?: string, timestamp: number }} VerdictCell
  * @typedef {{ ok: boolean, reason?: string, state: CoordState }} CoordResult
- * @typedef {{ bucket_id: string, stratum: string, item_ids: string[], confirmations_required: number }} Bucket
+ * @typedef {{ bucket_id: string, stratum: string, item_ids: string[], confirmations_required: number,
+ *   excluded_reviewers?: string[] }} Bucket
+ * @typedef {"available"|"mine"|"claimed"|"complete"|"excluded"} BoardState
  */
 
 (function (/** @type {any} */ root) {
@@ -89,15 +98,26 @@
   }
 
   /**
+   * Whether a bucket's excluded_reviewers names this reviewer.
+   * @param {string[]|undefined} excluded
+   * @param {string} reviewer
+   * @returns {boolean}
+   */
+  function isExcluded(excluded, reviewer) {
+    return Array.isArray(excluded) && excluded.indexOf(reviewer) !== -1;
+  }
+
+  /**
    * Board status for one bucket from the reviewer's point of view.
    * @param {BucketState|undefined} bucketState
    * @param {number} required - the bucket's confirmations_required (from buckets.json)
    * @param {string} reviewer
    * @param {number} now
    * @param {number} [ttlMs]
-   * @returns {{ state: string, mine: boolean, holders: string[], completers: string[], claimants: string[], remaining: number, required: number, done: boolean }}
+   * @param {string[]} [excluded] - the bucket's excluded_reviewers (from buckets.json)
+   * @returns {{ state: BoardState, mine: boolean, holders: string[], completers: string[], claimants: string[], remaining: number, required: number, done: boolean }}
    */
-  function bucketStatus(bucketState, required, reviewer, now, ttlMs) {
+  function bucketStatus(bucketState, required, reviewer, now, ttlMs, excluded) {
     ttlMs = ttlMs ?? DEFAULT_TTL_MS;
     var b = bucketState || { claimants: [], completed_by: [] };
     var completers = (b.completed_by || []).slice();
@@ -107,8 +127,10 @@
     var iHold = held.has(reviewer);
     // active claimants who have NOT completed — the people currently mid-review (role distinct from completers)
     var claimants = activeClaimants(b, now, ttlMs).map(function (/** @type {Claimant} */ c) { return c.name; });
+    /** @type {BoardState} */
     var state;
-    if (iCompleted) state = "complete";           // I finished it (regardless of others)
+    if (isExcluded(excluded, reviewer)) state = "excluded"; // never open to this reviewer, whatever its progress
+    else if (iCompleted) state = "complete";      // I finished it (regardless of others)
     else if (done) state = "complete";            // enough others finished
     else if (iHold) state = "mine";               // I hold a live slot
     else if (held.size >= required) state = "claimed"; // others hold all slots
@@ -129,20 +151,22 @@
    * The first bucket this reviewer can still open — one available to claim, or their own in-progress —
    * scanning `buckets` in board order and skipping `excludeId`. This is the board's per-bucket openable
    * predicate (bucketStatus state "available" or "mine") applied across the whole list, so a "review the
-   * next one" shortcut targets exactly what the board would let them open. Null when none remain.
-   * @param {Pick<Bucket, "bucket_id" | "confirmations_required">[]} buckets - buckets.json entries (only bucket_id + confirmations_required are read)
+   * next one" shortcut targets exactly what the board would let them open; a bucket whose
+   * excluded_reviewers names the reviewer is never returned. Null when none remain.
+   * @template {Pick<Bucket, "bucket_id" | "confirmations_required" | "excluded_reviewers">} B
+   * @param {B[]} buckets - buckets.json entries (only bucket_id, confirmations_required and excluded_reviewers are read)
    * @param {CoordState} state
    * @param {string} reviewer
    * @param {number} now
    * @param {string|null} [excludeId] - a bucket to skip (typically the one just completed)
    * @param {number} [ttlMs]
-   * @returns {(Pick<Bucket, "bucket_id" | "confirmations_required">|null)}
+   * @returns {B|null}
    */
   function nextOpenBucket(buckets, state, reviewer, now, excludeId, ttlMs) {
     for (var i = 0; i < buckets.length; i++) {
       var b = buckets[i];
       if (!b || (excludeId && b.bucket_id === excludeId)) continue;
-      var st = bucketStatus(state.buckets[b.bucket_id], b.confirmations_required, reviewer, now, ttlMs);
+      var st = bucketStatus(state.buckets[b.bucket_id], b.confirmations_required, reviewer, now, ttlMs, b.excluded_reviewers);
       if (st.state === "available" || st.state === "mine") return b;
     }
     return null;
@@ -257,18 +281,21 @@
 
   /**
    * Claim a bucket for a reviewer. Idempotent for a reviewer who already holds it (refreshes the
-   * lease ts). Capacity-bounded: refused when required slots are already held by others.
+   * lease ts). Capacity-bounded: refused when required slots are already held by others. Refused
+   * (reason "excluded") for a reviewer the bucket's excluded_reviewers names.
    * @param {CoordState} state
    * @param {string} bucketId
    * @param {number} required
    * @param {string} reviewer
    * @param {number} now
    * @param {number} [ttlMs]
+   * @param {string[]} [excluded] - the bucket's excluded_reviewers (from buckets.json)
    * @returns {CoordResult}
    */
-  function claim(state, bucketId, required, reviewer, now, ttlMs) {
+  function claim(state, bucketId, required, reviewer, now, ttlMs, excluded) {
     ttlMs = ttlMs ?? DEFAULT_TTL_MS;
     var s = _clone(state);
+    if (isExcluded(excluded, reviewer)) return { ok: false, reason: "excluded", state: s };
     var b = _bucket(s, bucketId);
     if ((b.completed_by || []).indexOf(reviewer) !== -1) return { ok: true, reason: "already completed", state: s };
     var existing = b.claimants.find(function (/** @type {Claimant} */ c) { return c.name === reviewer; });
@@ -324,7 +351,8 @@
 
   /**
    * Merge one reviewer's verdict cells into an accumulator, latest timestamp winning per item (a
-   * same-reviewer multi-device union — a re-pull can't double-count).
+   * same-reviewer multi-device union — a re-pull can't double-count). The winning cell keeps its
+   * string `detail`; a cell without one stays without one.
    * @param {Record<string, VerdictCell>} acc
    * @param {Record<string, VerdictCell>} decisions
    * @returns {Record<string, VerdictCell>}
@@ -336,7 +364,11 @@
       if (!cell || typeof cell.verdict !== "string") return;
       var ts = typeof cell.timestamp === "number" ? cell.timestamp : 0;
       var existing = acc[itemId];
-      if (!existing || ts >= existing.timestamp) acc[itemId] = { verdict: cell.verdict, timestamp: ts };
+      if (existing && ts < existing.timestamp) return;
+      /** @type {VerdictCell} */
+      var next = { verdict: cell.verdict, timestamp: ts };
+      if (typeof cell.detail === "string") next.detail = cell.detail;
+      acc[itemId] = next;
     });
     return acc;
   }

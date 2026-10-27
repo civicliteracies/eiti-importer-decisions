@@ -1,0 +1,57 @@
+{
+  "owner": "civicliteracies",
+  "repo": "eiti-calibration",
+  "statePath": "state.json",
+  "verdictDir": "verdicts",
+  "dataUrls": {
+    "scaffolds": "scaffolds.json",
+    "buckets": "buckets.json",
+    "manifest": "manifest.json"
+  },
+  "storagePrefix": "calib:",
+  "lockPrefix": "calib:writer:",
+  "identity": "typed",
+  "config": {
+    "kinds": {
+      "merge": {
+        "question": "The panel grouped these names as ONE entity. Are they all the same real entity?",
+        "choices": [["same", "All one entity"], ["different", "Not all one"]]
+      },
+      "split": {
+        "question": "The panel kept these as SEPARATE entities. Are they actually the same real entity?",
+        "choices": [["same", "Same entity"], ["different", "Different entities"]]
+      },
+      "disposition": {
+        "question": "Is this a real entity, or junk / a placeholder / an aggregate label?",
+        "choices": [["entity", "Real entity"], ["not_entity", "Junk / placeholder"]]
+      }
+    },
+    "unsure": "unsure"
+  },
+  "practice": [
+    {
+      "item_id": "practice-1",
+      "stratum": "merge",
+      "country_iso3": "XX",
+      "names": ["Ministry of Finance", "Min. of Finance", "MoF"],
+      "machine_verdict": "same",
+      "machine_detail": null
+    },
+    {
+      "item_id": "practice-2",
+      "stratum": "split",
+      "country_iso3": "XX",
+      "names": ["Ministry of Finance", "Ministry of Health"],
+      "machine_verdict": "different",
+      "machine_detail": null
+    },
+    {
+      "item_id": "practice-3",
+      "stratum": "disposition",
+      "country_iso3": "XX",
+      "names": ["Total revenue (all companies)"],
+      "machine_verdict": "not_entity",
+      "machine_detail": "aggregate"
+    }
+  ]
+}
