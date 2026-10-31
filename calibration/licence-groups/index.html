@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- This page's OWN CSP (per-page meta; the mirror sets no server CSP). It adds api.github.com to
+       connect-src for the coordination reads/writes, and font-src 'self' for the shared Metropolis
+       @font-face in ../../style.css. The other published pages keep their strict connect-src 'self'. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://api.github.com; base-uri 'none'; form-action 'none';">
+  <!-- The page's review config (repo, paths, questions, practice set), read by calibration-boot.js. -->
+  <meta name="calibration-config" content="config.json">
+  <title>EITI Data Importer — Projects connected by a licence</title>
+  <meta name="description" content="Human review of which projects a licence connects are one project.">
+  <link rel="icon" type="image/svg+xml" href="../../cli-logo.svg">
+  <link rel="stylesheet" href="../../style.css">
+  <link rel="stylesheet" href="../calibration.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <nav class="site-nav" aria-label="Sections">
+        <a href="../../">Decision log</a>
+        <a href="../../corpus-validation.html">Corpus validation</a>
+        <a href="../../import-progress.html">Import progress</a>
+        <a href="../calibration.html" aria-current="page">Calibration</a>
+        <a href="../../dedup-pipeline.html">Pipeline</a>
+      </nav>
+      <p class="eyebrow">EITI Data Importer</p>
+      <h1>Projects connected by a licence</h1>
+      <p class="lede">A licence can connect several reported projects. EITI Guidance Note 29 leaves it to each country to say which of them are one project — judge each group from what the country reports.</p>
+    </div>
+  </header>
+
+  <main id="content" class="wrap">
+    <div id="banner" class="banner" role="status"></div>
+    <!-- Calm visual save chrome only — NOT a live region (per-keystroke "Saving…/✓ Saved" would spam a
+         screen reader). Genuine failures are announced via #banner's role=status. -->
+    <div id="save-indicator" class="save-indicator" aria-hidden="true"></div>
+    <div id="app"></div>
+  </main>
+
+  <script src="../review-widget.js"></script>
+  <script src="../calibration-core.js"></script>
+  <script src="../calibration.js"></script>
+  <script src="../calibration-boot.js"></script>
+</body>
+</html>

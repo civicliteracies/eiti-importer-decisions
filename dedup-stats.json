@@ -2,8 +2,8 @@
   "base_rate": {
     "avg_distinct_names": 1.3,
     "single_pct": 81,
-    "single_spelling": 11338,
-    "varied": 2704,
+    "single_spelling": 11292,
+    "varied": 2723,
     "varied_pct": 19
   },
   "extremes": {
@@ -65,7 +65,7 @@
       "type_label": "government agencies"
     }
   },
-  "generated_from": "b9d2022347425820",
+  "generated_from": "d921a04f7e75bb15",
   "hard_calls": {
     "kept_apart": 157,
     "multinationals": 77,
@@ -83,13 +83,13 @@
         "label": "government agencies"
       },
       "project": {
-        "entities": 4104,
+        "entities": 4077,
         "label": "projects"
       }
     },
-    "distinct_name_forms": 18246,
-    "entities": 14042,
-    "mentions": 153898
+    "distinct_name_forms": 18249,
+    "entities": 14015,
+    "mentions": 153901
   },
   "variation_kinds": [
     {

@@ -169,3 +169,10 @@ button.step-back { width: 100%; }
 .sum-table th { font-weight: 600; color: var(--fg-subtle); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .sum-table tr.me td { font-weight: 700; color: var(--accent); }
 .sum-table td:not(:first-child), .sum-table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* A partition item: one row per member, its evidence under its name, its selector beneath. */
+.members { list-style: none; padding: 0; margin: 0.5rem 0 1rem; }
+.member { padding: 0.6rem 0; border-top: 1px solid var(--rule); }
+.member .facts { margin: 0.25rem 0 0.4rem 1.1rem; font-size: 0.88rem; color: var(--fg-muted); }
+.member select { max-width: 100%; }
+.unsaved { margin-top: 0.4rem; font-size: 0.88rem; color: var(--fg-muted); }

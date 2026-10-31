@@ -1,0 +1,45 @@
+{
+  "owner": "civicliteracies",
+  "repo": "eiti-calibration",
+  "statePath": "contested/state.json",
+  "verdictDir": "contested/verdicts",
+  "dataUrls": {
+    "scaffolds": "scaffolds.json",
+    "buckets": "buckets.json",
+    "manifest": "manifest.json"
+  },
+  "storagePrefix": "calib:contested:",
+  "lockPrefix": "calib:contested:writer:",
+  "identity": "typed",
+  "config": {
+    "kinds": {
+      "split": {
+        "question": "The panel kept these as SEPARATE entities. Are they actually the same real entity?",
+        "choices": [["same", "Same entity"], ["different", "Different entities"]]
+      },
+      "disposition": {
+        "question": "Is this a real entity, or junk / a placeholder / an aggregate label?",
+        "choices": [["entity", "Real entity"], ["not_entity", "Junk / placeholder"]]
+      }
+    },
+    "unsure": "unsure"
+  },
+  "practice": [
+    {
+      "item_id": "practice-1",
+      "stratum": "split",
+      "country_iso3": "XX",
+      "names": ["Ministry of Finance", "Ministry of Health"],
+      "machine_verdict": "different",
+      "machine_detail": null
+    },
+    {
+      "item_id": "practice-2",
+      "stratum": "disposition",
+      "country_iso3": "XX",
+      "names": ["Total revenue (all companies)"],
+      "machine_verdict": "not_entity",
+      "machine_detail": "aggregate"
+    }
+  ]
+}

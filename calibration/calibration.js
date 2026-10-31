@@ -61,7 +61,12 @@
  * @typedef {import("./review-widget.js").ReviewConfig} ReviewConfig
  * @typedef {import("./review-widget.js").ReviewItem} ReviewItem
  * @typedef {import("./review-widget.js").Decided} Decided
+ * @typedef {import("./review-widget.js").Partition} Partition
  * @typedef {import("./calibration-core.js").VerdictCell} VerdictCell
+ * @typedef {import("./calibration-core.js").CoordState} CoordState
+ * @typedef {import("./calibration-core.js").BucketState} BucketState
+ * @typedef {import("./calibration-core.js").SessionRec} SessionRec
+ * @typedef {import("./calibration-core.js").Bucket} Bucket
  * @typedef {{ scaffolds: string, buckets: string, manifest: string }} DataUrls
  * @typedef {{ owner: string, repo: string, statePath: string, verdictDir: string, dataUrls: DataUrls,
  *   storagePrefix: string, lockPrefix: string, config: ReviewConfig, practice: ReviewItem[],
@@ -74,9 +79,32 @@
  *   config: the review semantics per item kind. practice: the warm-up items, shown with the reveal (may be []).
  *   identity: "typed" (roster screen, shared token) or "github" (the token's GitHub login).
  * @typedef {{ sha: (string|undefined), decisions: Record<string, VerdictCell> }} VerdictSnapshot
+ * @typedef {{ reviewer: string, bucket_id: string, decisions: Record<string, VerdictCell>, campaign_id: string }} VerdictFile
+ *   - one (bucket, reviewer)'s verdict file, stamped with the campaign_id of the manifest its items were
+ *   published under, so the campaign's ingest can refuse a file reviewed against another publish
+ * @typedef {{ campaign_id: string }} Manifest - the page's published manifest.json, as far as the shell
+ *   reads it: the publish the page's items come from (a non-empty id)
+ * @typedef {{ content: string, sha: string }} GhFile - a Contents API GET of a file: its base64 content and blob sha
+ * @typedef {{ content: { sha: string } }} GhPutResult - a Contents API PUT: the file's new blob sha
+ * @typedef {{ login: string }} GhUser - GET /user, as far as the shell reads it
+ * @typedef {"AUTH"|"CAS"|"RETRYABLE"|"OTHER"} ErrKind - calibration-core.classifyError's classes
+ * @typedef {Error & { kind: ErrKind, status: number }} GhError - a classified GitHub call failure
+ * @typedef {{ ok: boolean, declined?: boolean, state: CoordState }} StateResult - a withState outcome
+ * @typedef {{ kind: "label", bucket: Bucket, idx: number, notice: (string|null), noticeAnnounced: boolean,
+ *   pending: (string|null), draftMember: (string|null) }} LabelScreen - one labeling session of a bucket,
+ *   opened by openBucket: the item shown (idx); a calm notice for the session (a full-bucket claim race),
+ *   announced once; the first-step answer awaiting its follow-up on the current item (the widget's
+ *   two-step choice), cleared whenever the item changes or an answer commits; and the member whose
+ *   selector changed the current item's draft last, so its selector keeps focus
+ * @typedef {{ kind: "loading" } | { kind: "roster" } | { kind: "practice" } | { kind: "board" } | LabelScreen
+ *   | { kind: "completing", bucket: Bucket }} Screen - what the page shows; "completing" is a finished
+ *   bucket whose verdicts are flushing before it is marked complete
+ * @typedef {typeof globalThis & { CalibrationReviewWidget?: typeof import("./review-widget.js"),
+ *   CalibrationCoord?: typeof import("./calibration-core.js"), CalibrationApp?: typeof import("./calibration.js") }} Globals
+ *   - the window the classic scripts publish themselves onto
  */
 
-(function (/** @type {any} */ root) {
+(function (/** @type {Globals} */ root) {
   "use strict";
 
   var TIMEOUT_MS = 15000;
@@ -91,12 +119,15 @@
   /** @param {string} b64 */
   function b64decode(b64) { return decodeURIComponent(escape(atob(b64))); }
 
-  /** @param {string} kind @param {number} status @param {string} message @returns {any} */
+  /** @param {ErrKind} kind @param {number} status @param {string} message @returns {GhError} */
   function makeErr(kind, status, message) {
-    var e = /** @type {any} */ (new Error(message));
-    e.kind = kind; e.status = status;
-    return e;
+    return Object.assign(new Error(message), { kind: kind, status: status });
   }
+  // The class of a failure makeErr raised, or "" for any other rejection.
+  /** @param {unknown} e @returns {string} */
+  function errKind(e) { return e && typeof e === "object" && "kind" in e && typeof e.kind === "string" ? e.kind : ""; }
+  /** @param {unknown} e @returns {string} */
+  function messageOf(e) { return e instanceof Error ? e.message : String(e); }
   function timeoutSignal() {
     return (typeof AbortSignal !== "undefined" && AbortSignal.timeout) ? AbortSignal.timeout(TIMEOUT_MS) : undefined;
   }
@@ -120,7 +151,7 @@
   // flush drops the snapshot so the next attempt re-seeds from GitHub. io.save persists one file's
   // batch given the prior snapshot and resolves the NEW snapshot; io.onSaved / io.onFailed report
   // which item ids landed or need re-labeling. Injected so the writer is unit-testable without the DOM.
-  /** @param {{save:(b:string,r:string,d:Record<string,Decided>,snapshot:(VerdictSnapshot|null))=>Promise<VerdictSnapshot>, onSaved?:(ids:string[])=>void, onFailed?:(ids:string[], err:any)=>void, isRetryable?:(err:any)=>boolean, debounceMs?:number, retryMs?:number}} io */
+  /** @param {{save:(b:string,r:string,d:Record<string,Decided>,snapshot:(VerdictSnapshot|null))=>Promise<VerdictSnapshot>, onSaved?:(ids:string[])=>void, onFailed?:(ids:string[], err:unknown)=>void, isRetryable?:(err:unknown)=>boolean, debounceMs?:number, retryMs?:number}} io */
   function makeVerdictWriter(io) {
     var debounceMs = io.debounceMs == null ? 700 : io.debounceMs;
     var retryMs = io.retryMs == null ? 3000 : io.retryMs; // spacing before an automatic re-flush after a retryable failure
@@ -130,7 +161,7 @@
     var snap = {}; // per-file authoritative {sha, decisions} threaded across flushes (null/absent ⇒ re-seed via GET)
     /** @type {Promise<unknown>} */
     var chain = Promise.resolve();
-    /** @type {any} */
+    /** @type {ReturnType<typeof setTimeout>|null} */
     var timer = null;
     /** @param {string} bucketId @param {string} reviewer */
     function keyFor(bucketId, reviewer) { return bucketId + "__" + reviewer; }
@@ -158,7 +189,7 @@
               ids.forEach(function (id) { if (decisions[id] === batch[id]) delete decisions[id]; });
               if (!Object.keys(decisions).length) delete pending[k];
               try { if (io.onSaved) io.onSaved(ids); } catch (e) { /* a callback throw must not poison the chain */ }
-            }, function (err) {
+            }, function (/** @type {unknown} */ err) {
               snap[k] = null; // the file's sha is now uncertain — re-seed from GitHub on the next attempt
               try { if (io.onFailed) io.onFailed(ids, err); } catch (e) { /* as above */ } // items stay in `pending`
               // Only a retryable failure earns an automatic re-flush; a permanent one (AUTH/OTHER) would
@@ -177,7 +208,7 @@
       queue: function (bucketId, reviewer, itemId, decided) {
         var k = keyFor(bucketId, reviewer);
         var slot = pending[k] || (pending[k] = { bucketId: bucketId, reviewer: reviewer, decisions: {} });
-        slot.decisions[itemId] = { verdict: decided.verdict, detail: decided.detail };
+        slot.decisions[itemId] = decided;
         schedule();
       },
       // Cancel the debounce and flush now; await the returned promise before treating a bucket as done.
@@ -185,28 +216,41 @@
     };
   }
 
-  // The verdict cell a reviewer's answer is stored as: `detail` only when the answer has one, so a
-  // one-step answer's cell is exactly { verdict, timestamp }.
+  // The answer a widget commit stands for: a partition answer carries its partition and no detail.
+  /** @param {string} verdict @param {string|null} detail @param {Partition|undefined} partition @returns {Decided} */
+  function decidedOf(verdict, detail, partition) {
+    return partition ? { verdict: verdict, detail: null, partition: partition } : { verdict: verdict, detail: detail };
+  }
+
+  // The verdict cell a reviewer's answer is stored as: `detail` and `partition` only when the answer
+  // has one, so a one-step answer's cell is exactly { verdict, timestamp }.
   /** @param {Decided} decided @param {number} timestamp @returns {VerdictCell} */
   function verdictCell(decided, timestamp) {
     /** @type {VerdictCell} */
     var cell = { verdict: decided.verdict, timestamp: timestamp };
     if (decided.detail != null) cell.detail = decided.detail;
+    if (decided.partition != null) cell.partition = decided.partition;
     return cell;
   }
 
   // ---- options ----------------------------------------------------------------------------------
   var _GH_NAME_RE = /^[A-Za-z0-9_.-]+$/;
 
-  /** @param {any} obj @param {string} key @returns {boolean} */
-  function own(obj, key) { return obj != null && Object.prototype.hasOwnProperty.call(obj, key); }
+  /** @param {unknown} v @returns {v is Record<string, unknown>} */
+  function isObject(v) { return v != null && typeof v === "object"; }
 
-  /** @param {any} v @returns {boolean} */
+  /** @param {unknown} v @returns {v is unknown[]} */
+  function isList(v) { return Array.isArray(v); }
+
+  /** @param {unknown} v @returns {v is string[]} */
+  function isStringList(v) { return isList(v) && v.every(function (x) { return typeof x === "string"; }); }
+
+  /** @param {unknown} v @returns {v is string} */
   function nonEmptyString(v) { return typeof v === "string" && v.length > 0; }
 
   // A repo-relative path: non-empty "/"-separated segments, none of them "." or "..", so a page's
   // statePath/verdictDir can only ever address a file inside the coordination repo.
-  /** @param {any} p @returns {boolean} */
+  /** @param {unknown} p @returns {boolean} */
   function isRepoPath(p) {
     return nonEmptyString(p) && String(p).split("/").every(function (seg) { return seg !== "" && seg !== "." && seg !== ".."; });
   }
@@ -214,42 +258,145 @@
   /** @param {string} p @returns {string} */
   function encodePath(p) { return p.split("/").map(encodeURIComponent).join("/"); }
 
+  // ---- data read from GitHub and the page's data files ------------------------------------------
+  // Each read is checked against its declared shape here, once; a mismatch throws.
+
+  /** @param {unknown} v @returns {v is BucketState} */
+  function isBucketState(v) {
+    return isObject(v) && isStringList(v.completed_by) && isList(v.claimants) && v.claimants.every(function (c) {
+      return isObject(c) && typeof c.name === "string" && typeof c.ts === "number";
+    });
+  }
+
+  /** @param {unknown} v @returns {v is SessionRec} */
+  function isSessionRec(v) { return isObject(v) && typeof v.sessionId === "string" && typeof v.ts === "number"; }
+
+  /** @template T @param {unknown} v @param {(x: unknown) => x is T} isT @returns {v is Record<string, T>} */
+  function isRecordOf(v, isT) { return isObject(v) && Object.keys(v).every(function (k) { return isT(v[k]); }); }
+
+  // state.json: a state written before the single-session marker has no `sessions`.
+  /** @param {unknown} v @returns {v is CoordState} */
+  function isCoordState(v) {
+    return isObject(v) && isStringList(v.roster) && isRecordOf(v.buckets, isBucketState)
+      && (v.sessions === undefined || isRecordOf(v.sessions, isSessionRec));
+  }
+
+  /** @param {unknown} j @param {string} path @returns {CoordState} */
+  function parseCoordState(j, path) {
+    if (isCoordState(j)) return j;
+    throw makeErr("OTHER", 0, path + " is not a coordination state");
+  }
+
+  // A verdict file's cells, each still unknown: unionVerdicts keeps the well-formed ones. A file with
+  // no decisions object holds none.
+  /** @param {unknown} j @param {string} path @returns {Record<string, unknown>} */
+  function verdictDecisions(j, path) {
+    if (!isObject(j)) throw makeErr("OTHER", 0, path + " is not a verdict file");
+    return isObject(j.decisions) ? j.decisions : {};
+  }
+
+  /** @param {unknown} v @returns {v is Bucket} */
+  function isBucket(v) {
+    return isObject(v) && typeof v.bucket_id === "string" && typeof v.stratum === "string" && isStringList(v.item_ids)
+      && typeof v.confirmations_required === "number" && (v.excluded_reviewers === undefined || isStringList(v.excluded_reviewers));
+  }
+
+  /** @param {unknown} raw @param {string} url @returns {Bucket[]} */
+  function parseBuckets(raw, url) {
+    if (isList(raw) && raw.every(isBucket)) return raw;
+    throw new Error(url + " is not a list of buckets");
+  }
+
+  // The published items by id. Refuses a bucket that names an item `url` does not publish, so every
+  // bucket's items are in the map.
+  /** @param {ReviewItem[]} items @param {Bucket[]} buckets @param {string} url @returns {Map<string, ReviewItem>} */
+  function indexItems(items, buckets, url) {
+    /** @type {Map<string, ReviewItem>} */
+    var byId = new Map();
+    items.forEach(function (it) { byId.set(it.item_id, it); });
+    buckets.forEach(function (b) {
+      b.item_ids.forEach(function (id) {
+        if (!byId.has(id)) throw new Error("bucket " + b.bucket_id + " names item " + JSON.stringify(id) + ", which " + url + " does not publish");
+      });
+    });
+    return byId;
+  }
+
+  /** @param {unknown} raw @param {string} url @returns {Manifest} */
+  function parseManifest(raw, url) {
+    if (isObject(raw) && nonEmptyString(raw.campaign_id)) return { campaign_id: raw.campaign_id };
+    throw new Error(url + " is not a campaign manifest: it needs a non-empty campaign_id");
+  }
+
+  /** @param {unknown} j @param {number} status @param {string} path @returns {GhFile} */
+  function parseGhFile(j, status, path) {
+    if (isObject(j) && typeof j.content === "string" && typeof j.sha === "string") return { content: j.content, sha: j.sha };
+    throw makeErr("OTHER", status, "GET " + path + ": response had no content and sha");
+  }
+
+  // The returned sha is threaded forward as the next write's CAS token; if a malformed response ever
+  // lacked it, `sha` would be undefined → ghPut's `if (sha)` treats it as a create and silently drops
+  // CAS. Refuse it (OTHER = surface, don't retry-loop) rather than write blind.
+  /** @param {unknown} j @param {number} status @param {string} path @returns {GhPutResult} */
+  function parseGhPutResult(j, status, path) {
+    var sha = isObject(j) && isObject(j.content) ? j.content.sha : undefined;
+    if (typeof sha === "string" && sha) return { content: { sha: sha } };
+    throw makeErr("OTHER", status, "PUT " + path + ": response had no content.sha");
+  }
+
+  /** @param {unknown} j @param {number} status @returns {GhUser} */
+  function parseGhUser(j, status) {
+    if (isObject(j) && typeof j.login === "string") return { login: j.login };
+    throw makeErr("OTHER", status, "GET /user: response had no login");
+  }
+
   /**
    * Refuse options a page could not run with — before anything renders — with a message naming the
-   * first problem. The review config is checked by the widget's own validateReviewConfig.
-   * @param {any} o
-   * @param {any} W - the review widget module
+   * first problem. The review config is checked by the widget's own validateReviewConfig, and each
+   * practice item by its validateReviewItem.
+   * @param {unknown} o
+   * @param {typeof import("./review-widget.js")} W - the review widget module
    * @returns {AppOptions}
    */
   function checkOptions(o, W) {
     /** @param {string} why @returns {never} */
     function fail(why) { throw new Error("CalibrationApp.create: " + why); }
-    if (!o || typeof o !== "object") fail("options must be an object");
-    ["owner", "repo"].forEach(function (k) { if (!nonEmptyString(o[k]) || !_GH_NAME_RE.test(o[k])) fail(k + " must be a GitHub owner/repo name"); });
+    if (!isObject(o)) fail("options must be an object");
+    ["owner", "repo"].forEach(function (k) { var v = o[k]; if (!nonEmptyString(v) || !_GH_NAME_RE.test(v)) fail(k + " must be a GitHub owner/repo name"); });
     ["statePath", "verdictDir"].forEach(function (k) { if (!isRepoPath(o[k])) fail(k + " must be a repo-relative path with no empty, . or .. segment"); });
     ["storagePrefix", "lockPrefix"].forEach(function (k) { if (!nonEmptyString(o[k])) fail(k + " must be a non-empty string"); });
-    if (!o.dataUrls || typeof o.dataUrls !== "object") fail("dataUrls must be an object");
-    ["scaffolds", "buckets", "manifest"].forEach(function (k) { if (!nonEmptyString(o.dataUrls[k])) fail("dataUrls." + k + " must be a non-empty string"); });
+    const dataUrls = o.dataUrls; // const: its narrowing reaches the closure below
+    if (!isObject(dataUrls)) fail("dataUrls must be an object");
+    ["scaffolds", "buckets", "manifest"].forEach(function (k) { if (!nonEmptyString(dataUrls[k])) fail("dataUrls." + k + " must be a non-empty string"); });
     if (o.identity !== "typed" && o.identity !== "github") fail('identity must be "typed" or "github"');
     var vc = W.validateReviewConfig(o.config);
     if (!vc.ok) fail("config: " + vc.reason);
-    if (!Array.isArray(o.practice)) fail("practice must be an array (empty for no practice set)");
-    o.practice.forEach(function (/** @type {any} */ it, /** @type {number} */ i) {
-      if (!it || !own(o.config.kinds, it.stratum)) fail("practice item " + (i + 1) + " has a kind the config does not define");
+    var config = /** @type {ReviewConfig} */ (o.config); // validateReviewConfig has held it to a ReviewConfig
+    var practice = o.practice;
+    if (!isList(practice)) fail("practice must be an array (empty for no practice set)");
+    practice.forEach(function (it, /** @type {number} */ i) {
+      var vi = W.validateReviewItem(it, config);
+      if (!vi.ok) fail("practice item " + (i + 1) + ": " + vi.reason);
     });
     return /** @type {AppOptions} */ (o);
   }
 
+  /** @template T @param {T|undefined} mod @param {string} file @returns {T} */
+  function sibling(mod, file) {
+    if (!mod) throw new Error("CalibrationApp.create: " + file + " is not loaded");
+    return mod;
+  }
+
   /**
    * Build one review page instance from its options. Reads the stored token (and the link fragment's
-   * token) and the stored reviewer; renders and fetches nothing until boot().
-   * @param {AppOptions} options
+   * token) and the stored reviewer; renders and fetches nothing until boot(). `options` is parsed
+   * here (checkOptions), so a page's config reaches it as data.
+   * @param {unknown} options
    */
   function create(options) {
-    // The two sibling classic scripts publish themselves onto window; typed `any` here (their strict
-    // types live in their own files, checked via their own tests).
-    var W = root.CalibrationReviewWidget;
-    var C = root.CalibrationCoord;
+    // The two sibling classic scripts publish themselves onto window before this one loads.
+    var W = sibling(root.CalibrationReviewWidget, "review-widget.js");
+    var C = sibling(root.CalibrationCoord, "calibration-core.js");
     var OPTS = checkOptions(options, W);
     var API = "https://api.github.com/repos/" + encodeURIComponent(OPTS.owner) + "/" + encodeURIComponent(OPTS.repo) + "/contents/";
     var STATE_PATH = encodePath(OPTS.statePath);
@@ -284,12 +431,12 @@
     // A token death (401/403) — the one failure class that flips the page read-only. markAuthFailed alone
     // only repaints the banner; callers that could be mid-write must follow it with recomputeMode() to
     // actually re-derive `mode` and bounce off any writing screen.
-    /** @param {any} e @returns {boolean} */
-    function isAuthError(e) { return !!(e && e.kind === "AUTH"); }
+    /** @param {unknown} e @returns {boolean} */
+    function isAuthError(e) { return errKind(e) === "AUTH"; }
     function markAuthFailed() { authFailed = true; renderBanner(); }
 
     // Classify + surface a sync failure WITHOUT disabling writes (unless it's a genuine AUTH failure).
-    /** @param {any} err */
+    /** @param {unknown} err */
     function reportSyncFailure(err) {
       if (isAuthError(err)) { markAuthFailed(); return; }
       syncFailed = true;
@@ -302,44 +449,42 @@
     // 409'd PUT does NOT invalidate a cached GET (HTTP invalidation applies to non-error responses).
     // Without no-store the browser would re-serve a stale sha from its own cache for up to a minute —
     // so a CAS retry re-reads the SAME stale sha and 409s forever. Every read must reach GitHub.
-    /** @param {string} path @returns {Promise<{json:any, sha:string}|null>} */
+    /** @param {string} path @returns {Promise<{json:unknown, sha:string}|null>} */
     function ghGet(path) {
-      /** @type {any} */
+      /** @type {RequestInit} */
       var opts = { cache: "no-store", headers: { Authorization: "Bearer " + TOKEN, Accept: "application/vnd.github+json" } };
       var sig = timeoutSignal(); if (sig) opts.signal = sig;
-      return fetch(API + path, opts).catch(function (e) {
-        throw makeErr("RETRYABLE", 0, "network: " + (e && e.message)); // fetch reject (network/DNS/abort)
+      return fetch(API + path, opts).catch(function (/** @type {unknown} */ e) {
+        throw makeErr("RETRYABLE", 0, "network: " + messageOf(e)); // fetch reject (network/DNS/abort)
       }).then(function (r) {
         if (r.status === 404) return null;
         if (!r.ok) throw makeErr(C.classifyError(r.status), r.status, "GET " + path + " → " + r.status);
-        return r.json().then(function (j) { return { json: JSON.parse(b64decode(j.content)), sha: j.sha }; });
+        return r.json().then(function (/** @type {unknown} */ j) {
+          var file = parseGhFile(j, r.status, path);
+          /** @type {unknown} */
+          var json = JSON.parse(b64decode(file.content));
+          return { json: json, sha: file.sha };
+        });
       });
     }
     // PUT a file (sha optional to create). Resolves {sha}; throws a typed error on failure.
-    /** @param {string} path @param {any} obj @param {string} [sha] @returns {Promise<{sha:string}>} */
+    /** @param {string} path @param {unknown} obj @param {string} [sha] @returns {Promise<{sha:string}>} */
     function ghPut(path, obj, sha) {
-      /** @type {any} */
+      /** @type {{ message: string, content: string, sha?: string }} */
       var body = { message: "calibration: update " + path, content: b64encode(JSON.stringify(obj, null, 2)) };
       if (sha) body.sha = sha;
-      /** @type {any} */
+      /** @type {RequestInit} */
       var opts = {
         method: "PUT",
         headers: { Authorization: "Bearer " + TOKEN, Accept: "application/vnd.github+json" },
         body: JSON.stringify(body),
       };
       var sig = timeoutSignal(); if (sig) opts.signal = sig;
-      return fetch(API + path, opts).catch(function (e) {
-        throw makeErr("RETRYABLE", 0, "network: " + (e && e.message));
+      return fetch(API + path, opts).catch(function (/** @type {unknown} */ e) {
+        throw makeErr("RETRYABLE", 0, "network: " + messageOf(e));
       }).then(function (r) {
         if (!r.ok) throw makeErr(C.classifyError(r.status), r.status, "PUT " + path + " → " + r.status);
-        return r.json().then(function (j) {
-          // The returned sha is threaded forward as the next write's CAS token; if a malformed response
-          // ever lacked it, `sha` would be undefined → ghPut's `if (sha)` treats it as a create and
-          // silently drops CAS. Refuse it (OTHER = surface, don't retry-loop) rather than write blind.
-          var sha = j && j.content && j.content.sha;
-          if (typeof sha !== "string" || !sha) throw makeErr("OTHER", r.status, "PUT " + path + ": response had no content.sha");
-          return { sha: sha };
-        });
+        return r.json().then(function (/** @type {unknown} */ j) { return { sha: parseGhPutResult(j, r.status, path).content.sha }; });
       });
     }
 
@@ -362,15 +507,15 @@
     // isRetryable + MAX_TRIES + backoff policy shared by withState and saveVerdicts. Each retry re-invokes
     // `attempt` from scratch (re-GET → re-mutate/re-union → re-PUT) — never a replayed precomputed
     // payload, which is what lets a CAS loser observe an interleaved write and decline.
-    /** @template T @param {() => Promise<T>} attempt @param {number} tries @param {(err:any)=>void} [onRetry] @returns {Promise<T>} */
+    /** @template T @param {() => Promise<T>} attempt @param {number} tries @param {(err:unknown)=>void} [onRetry] @returns {Promise<T>} */
     function retryWithBackoff(attempt, tries, onRetry) {
-      return attempt().catch(function (e) {
-        if (!C.isRetryable(e && e.kind) || tries <= 0) throw e;
+      return attempt().catch(function (/** @type {unknown} */ e) {
+        if (!C.isRetryable(errKind(e)) || tries <= 0) throw e;
         if (onRetry) onRetry(e);
         return delay(backoff(MAX_TRIES - tries)).then(function () { return retryWithBackoff(attempt, tries - 1, onRetry); });
       });
     }
-    /** @param {(state:any)=>any} mutate @param {number} [tries] @returns {Promise<{ok:boolean, declined?:boolean, state:any}>} */
+    /** @param {(state:CoordState)=>(CoordState|null)} mutate @param {number} [tries] @returns {Promise<StateResult>} */
     function withState(mutate, tries) {
       // The single funnel for state.json OWNS state coherence: whatever an attempt resolves — the newly
       // written state on success, or the freshly-fetched state on a decline — becomes the module `state`
@@ -382,13 +527,13 @@
       stateChain = run.catch(function () {}); // keep the chain resolve-only so one failure can't wedge the queue
       return run;
     }
-    /** @param {(s:any)=>any} mutate @param {number} [tries] @returns {Promise<{ok:boolean, declined?:boolean, state:any}>} */
+    /** @param {(s:CoordState)=>(CoordState|null)} mutate @param {number} [tries] @returns {Promise<StateResult>} */
     function withStateAttempt(mutate, tries) {
       return retryWithBackoff(function () {
         return ghGet(STATE_PATH).then(function (cur) {
-          var fetched = cur ? cur.json : C.emptyState(); // local — do not shadow the module `state`
+          var fetched = cur ? parseCoordState(cur.json, STATE_PATH) : C.emptyState(); // local — do not shadow the module `state`
           var sha = cur ? cur.sha : undefined;
-          var next = mutate(fetched);
+          const next = mutate(fetched); // const: its not-null narrowing reaches the closure below
           if (next == null) return { ok: false, declined: true, state: fetched }; // mutator declined — no write; adopt the fetch
           return ghPut(STATE_PATH, next, sha).then(function () { return { ok: true, state: next }; });
         });
@@ -402,7 +547,7 @@
       return VERDICT_DIR + "/" + encodeURIComponent(bucketId) + "__" + encodeURIComponent(reviewer) + ".json";
     }
 
-    // Merge a batch of {itemId: {verdict, detail}} into a reviewer's verdict file, union-preserving prior
+    // Merge a batch of {itemId: Decided} into a reviewer's verdict file, union-preserving prior
     // decisions, under CAS. One commit per call regardless of batch size. Throws a typed error on
     // final failure.
     //
@@ -419,13 +564,18 @@
      *  @param {number} [tries] @returns {Promise<VerdictSnapshot>} */
     function saveVerdicts(bucketId, reviewer, newDecisions, snapshot, tries) {
       var path = verdictPath(bucketId, reviewer);
+      // Every verdict file carries its campaign's id; with no manifest loaded there is none to stamp.
+      var manifest = MANIFEST;
+      if (!manifest) return Promise.reject(new Error("cannot write " + path + ": the page's manifest is not loaded"));
+      var campaignId = manifest.campaign_id;
       // `snapshot` is re-read on each attempt; a genuine 409 drops it (onRetry below) so the retry
       // re-GETs fresh and re-unions — no verdict lost. A network blip keeps it (our sha is still valid).
       return retryWithBackoff(function () {
+        /** @type {Promise<{ sha: (string|undefined), decisions: Record<string, unknown> }>} */
         var seed = snapshot
           ? Promise.resolve({ sha: snapshot.sha, decisions: snapshot.decisions })
           : ghGet(path).then(function (cur) {
-              return { sha: cur ? cur.sha : undefined, decisions: cur ? (cur.json.decisions || {}) : {} };
+              return { sha: cur ? cur.sha : undefined, decisions: cur ? verdictDecisions(cur.json, path) : {} };
             });
         return seed.then(function (base) {
           var decisions = C.unionVerdicts({}, base.decisions); // clone + normalize; never mutate the threaded snapshot in place
@@ -434,33 +584,37 @@
             var d = newDecisions[id];
             if (d) decisions[id] = verdictCell(d, now);
           });
-          /** @type {{reviewer:string, bucket_id:string, decisions:any, campaign_id?:string}} */
-          var payload = { reviewer: reviewer, bucket_id: bucketId, decisions: decisions };
-          var stamp = C.contestedCampaignStamp(bucketId, CONTESTED_CAMPAIGN_ID);
-          if (stamp) payload.campaign_id = stamp; // contested files bind to the campaign; calibration files don't
+          /** @type {VerdictFile} */
+          var payload = { reviewer: reviewer, bucket_id: bucketId, decisions: decisions, campaign_id: campaignId };
           return ghPut(path, payload, base.sha).then(function (r) { return { sha: r.sha, decisions: decisions }; });
         });
-      }, tries == null ? MAX_TRIES : tries, function (e) { if (e && e.kind === "CAS") snapshot = null; });
+      }, tries == null ? MAX_TRIES : tries, function (e) { if (errKind(e) === "CAS") snapshot = null; });
     }
 
     // ---- app state (in memory) --------------------------------------------------------------------
-    /** @type {any[]} */ var SCAFFOLDS = [];
-    /** @type {import("./calibration-core.js").Bucket[]} */ var BUCKETS = [];
-    /** @type {any} */ var MANIFEST = {};
-    // Stamped onto contested verdict files so ingest can refuse verdicts reviewed against a different
-    // run's scaffolds (set from the manifest at boot; "" for a calibration-only campaign).
-    /** @type {string} */ var CONTESTED_CAMPAIGN_ID = "";
-    /** @type {Record<string, any>} */ var ITEMS_BY_ID = {};
-    var state = C ? C.emptyState() : { roster: [], buckets: {} };
+    /** @type {ReviewItem[]} */ var SCAFFOLDS = [];
+    /** @type {Bucket[]} */ var BUCKETS = [];
+    // The published manifest, read at boot; its campaign_id is stamped on every verdict file.
+    /** @type {Manifest|null} */ var MANIFEST = null;
+    /** @type {Map<string, ReviewItem>} */ var ITEMS = new Map();
+    var state = C.emptyState();
     // A typed identity resumes from storage; a GitHub identity is the token's login, resolved at boot.
     var reviewer = IDENTITY === "typed" && LS ? (LS.getItem(REVIEWER_KEY) || "") : "";
-    // `pending` is the first-step answer awaiting its follow-up on the current item (the widget's
-    // two-step choice), cleared whenever the item changes or an answer commits.
-    /** @type {{mode:string, bucket:any, idx:number, localVerdicts:Record<string,Decided>, unsaved:Record<string,boolean>, notice:string|null, pending:string|null}} */
-    var view = { mode: "loading", bucket: null, idx: 0, localVerdicts: {}, unsaved: {}, notice: null, pending: null };
+    // `drafts` holds, per item, the partition a partition item's reviewer is building and has not
+    // saved, kept across navigation for the page session and dropped when the item's answer commits.
+    /** @type {{screen:Screen, localVerdicts:Record<string,Decided>, unsaved:Record<string,boolean>, drafts:Record<string,Partition>}} */
+    var view = { screen: { kind: "loading" }, localVerdicts: {}, unsaved: {}, drafts: {} };
 
-    /** @param {any} bucket @returns {any[]} */
-    function scaffoldsFor(bucket) { return bucket.item_ids.map(function (/** @type {string} */ id) { return ITEMS_BY_ID[id]; }).filter(Boolean); }
+    // The published item `id`. Total once boot has indexed the items (indexItems), since a bucket names
+    // only published items and nothing reads a bucket before boot.
+    /** @param {string} id @returns {ReviewItem} */
+    function itemOf(id) {
+      var it = ITEMS.get(id);
+      if (!it) throw new Error("calibration: item " + JSON.stringify(id) + " is not published");
+      return it;
+    }
+    /** @param {Bucket} bucket @returns {ReviewItem[]} */
+    function scaffoldsFor(bucket) { return bucket.item_ids.map(function (id) { return itemOf(id); }); }
     function unsavedCount() { return Object.keys(view.unsaved).length; }
 
     // The single verdict writer for this session: labels queue here and flush coalesced + serialized.
@@ -479,7 +633,7 @@
         verdictSaving = false; showSaved = false; renderSaveIndicator(); // clear the calm "Saving…" — the amber banner owns the failure now
         reportSyncFailure(err);
       },
-      isRetryable: function (err) { return C.isRetryable(err && err.kind); },
+      isRetryable: function (err) { return C.isRetryable(errKind(err)); },
     });
 
     // ---- single active session --------------------------------------------------------------------
@@ -511,7 +665,7 @@
     // take-over `takingOver` is set, so `afterLock` treats our self-abort as intentional, not a real loss.
     /** @type {AbortController|null} */
     var lockCtl = null;
-    /** @type {((v?: any) => void)|null} */ // a Promise resolver (its value is unused); the optional-arg `any` is what a resolver assignment requires
+    /** @type {((v?: unknown) => void)|null} */ // a Promise resolver (its value is unused)
     var heldRelease = null;       // resolves the held-lock callback promise → releases our hold (see releaseLock)
     var releasing = false;        // a self-initiated release (pagehide) is in flight — its lock-callback settle is NOT a loss to re-elect on
     var takingOver = false;       // in-flight guard: a take-over is between click and settle (no double-fire)
@@ -567,7 +721,7 @@
       // Presence: claim the marker for this session; a remote/other holder steps down on its next read.
       withState(function (s) { return C.takeoverSession(s, reviewer, SESSION_ID, Date.now()).state; })
         .then(function () { recomputeMode(); rerenderCurrent(); done(); })
-        .catch(function (e) { reportSyncFailure(e); done(); });
+        .catch(function (/** @type {unknown} */ e) { reportSyncFailure(e); done(); });
       // Lock: steal it only when we don't already hold it (a self-steal would needlessly churn our hold).
       if (hasLocks() && lockState !== "held") {
         pending++;
@@ -583,7 +737,7 @@
     // Decide the presence write over freshly-fetched state: claim a free/stale slot or refresh our own,
     // or return null to decline when a live FOREIGN session holds the name. Pure over `s`; withState
     // adopts the fetched state on a decline, so a displaced session still updates its view of reality.
-    /** @param {any} s @param {string} rev @param {string} sid @param {number} now @returns {any} */
+    /** @param {CoordState} s @param {string} rev @param {string} sid @param {number} now @returns {CoordState|null} */
     function presenceMutation(s, rev, sid, now) {
       if (C.sessionHeldByOther(s, rev, sid, now)) return null; // a live foreign holder — don't write over it
       return C.claimSession(s, rev, sid, now).state;
@@ -602,7 +756,7 @@
         function () { presenceWriting = false; recomputeMode(); },
         // On genuine failure, adopt read-only if the token died; otherwise leave it for the next natural
         // trigger (poll/visibility) — do NOT re-derive-and-rewrite here, which would spin on a persistent error.
-        function (err) { presenceWriting = false; if (isAuthError(err)) { markAuthFailed(); recomputeMode(); } });
+        function (/** @type {unknown} */ err) { presenceWriting = false; if (isAuthError(err)) { markAuthFailed(); recomputeMode(); } });
     }
 
     // Re-derive mode from (lockState, presence, auth), execute any due presence write, and re-render on
@@ -615,7 +769,7 @@
       if (plan.write !== "none") writePresence();
       renderBanner();
       if (mode === was) return;
-      if (mode !== "active" && (view.mode === "label" || view.mode === "completing")) {
+      if (mode !== "active" && (view.screen.kind === "label" || view.screen.kind === "completing")) {
         // Demoted on a writing screen (a take-over landed): drain accepted verdicts (flushNow is never
         // gated), then drop to the now-read-only board rather than silently keep a writing UI up.
         verdictWriter.flushNow();
@@ -625,8 +779,9 @@
       }
     }
     function rerenderCurrent() {
-      if (view.mode === "board") renderBoard();
-      else if (view.mode === "label") renderLabel();
+      var screen = view.screen;
+      if (screen.kind === "board") renderBoard();
+      else if (screen.kind === "label") renderLabel(screen);
     }
 
     // ---- rendering --------------------------------------------------------------------------------
@@ -645,7 +800,7 @@
     var verdictSaving = false; // a verdict batch is in flight
     var claimingCount = 0;     // background slot-claims in flight (optimistic open)
     var showSaved = false;     // transient "✓ Saved" tick after a verdict batch lands
-    /** @type {any} */ var savedTimer = null;
+    /** @type {ReturnType<typeof setTimeout>|null} */ var savedTimer = null;
     // Collapse the three independent sources into ONE display state (exactly one is shown), so the
     // precedence lives in a single place instead of being hand-encoded in both the class and the text.
     /** @returns {"saving"|"claiming"|"saved"|"idle"} */
@@ -676,7 +831,6 @@
     function endClaiming() { claimingCount = Math.max(0, claimingCount - 1); renderSaveIndicator(); }
 
     /** @type {string|null} */ var lastBannerSig = null;
-    var noticeAnnounced = false; // announce the full-bucket-race notice once (see renderLabel), not on every item advance
     function renderBanner() {
       if (!bannerEl) return;
       var text, cls, takeover = false;
@@ -710,7 +864,7 @@
     function refreshState() { return withState(function () { return null; }).then(function () { return state; }); } // null → no write; withState adopts the fetch into `state`
 
     function renderRoster() {
-      view.mode = "roster";
+      view.screen = { kind: "roster" };
       appEl.textContent = "";
       var card = el("div", "card");
       card.appendChild(el("h2", null, "Who's reviewing?"));
@@ -735,7 +889,7 @@
           return r.state;
         }).then(function (res) {
           if (res.ok) setReviewer(name, false); // brand-new registration → show the one-time tutorial
-        }).catch(function (e) { reportSyncFailure(e); });
+        }).catch(function (/** @type {unknown} */ e) { reportSyncFailure(e); });
       });
       card.appendChild(input); card.appendChild(add);
       appEl.appendChild(card);
@@ -757,7 +911,7 @@
 
     /** @param {number} i */
     function renderPractice(i) {
-      view.mode = "practice";
+      view.screen = { kind: "practice" };
       appEl.textContent = "";
       appEl.appendChild(el("div", "practice-note", "Practice — these are examples with the answer shown, to learn the task. They are not scored."));
       const item = PRACTICE[i]; // const so the not-undefined narrowing below persists into the closures
@@ -765,12 +919,20 @@
       var main = el("div", null); appEl.appendChild(main);
       /** @type {string|null} */
       var pending = null; // a first-step answer awaiting its follow-up (the two-step choice)
+      /** @type {Partition|null} */
+      var draft = null; // a partition item's answer in the making
+      /** @type {string|null} */
+      var draftMember = null;
       var render = function (/** @type {Decided|null} */ decided) {
         W.renderReviewItem(document, main, item, decided, CONFIG, {
-          reveal: true, pending: pending, position: i + 1, total: PRACTICE.length,
+          reveal: true, pending: pending, draft: draft, focusMember: draftMember, position: i + 1, total: PRACTICE.length,
           // the reveal shows the reviewer's own answer against the practice item's machine answer
-          onChoose: function (/** @type {string} */ verdict, /** @type {string|null} */ detail) { pending = null; render({ verdict: verdict, detail: detail }); },
+          onChoose: function (/** @type {string} */ verdict, /** @type {string|null} */ detail, /** @type {Partition|undefined} */ partition) {
+            pending = null; draft = null; draftMember = null;
+            render(decidedOf(verdict, detail, partition));
+          },
           onPending: function (/** @type {string|null} */ verdict) { pending = verdict; render(decided); },
+          onDraft: function (/** @type {Partition} */ next, /** @type {string} */ memberId) { draft = next; draftMember = memberId; render(decided); },
           onNext: function () { renderPractice(i + 1); }, onPrev: function () { renderPractice(Math.max(0, i - 1)); },
         });
       };
@@ -778,7 +940,7 @@
     }
 
     function renderBoard() {
-      view.mode = "board";
+      view.screen = { kind: "board" };
       verdictWriter.flushNow(); // don't strand queued verdicts when leaving a bucket (never gated)
       appEl.textContent = "";
       var now = Date.now();
@@ -786,7 +948,7 @@
       heading.setAttribute("tabindex", "-1"); // focus target after a take-over so keyboard/SR users land here
       appEl.appendChild(heading);
       var bar = el("div", "board-actions");
-      var refresh = button("Refresh", function () { refreshState().then(function () { recomputeMode(); renderBoard(); }).catch(function (e) { reportSyncFailure(e); }); });
+      var refresh = button("Refresh", function () { refreshState().then(function () { recomputeMode(); renderBoard(); }).catch(function (/** @type {unknown} */ e) { reportSyncFailure(e); }); });
       refresh.className = "secondary"; bar.appendChild(refresh);
       var sum = button("Progress summary", showSummary); sum.className = "secondary"; bar.appendChild(sum);
       // (A passive session's "Make this the active session" lives in the banner, next to the explanation
@@ -842,8 +1004,8 @@
         + t.complete + " of " + t.buckets + " buckets confirmed · "
         + t.inProgress + " in progress · " + t.judgments + " item-judgments recorded"));
       var strata = el("div", "sum-strata");
-      Object.keys(s.perStratum).sort().forEach(function (k) {
-        var ps = s.perStratum[k];
+      Object.entries(s.perStratum).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; }).forEach(function (entry) {
+        var k = entry[0], ps = entry[1];
         strata.appendChild(el("div", "sum-row", k + " — " + ps.complete + " / " + ps.total + " buckets confirmed"));
       });
       modal.appendChild(strata);
@@ -851,7 +1013,7 @@
       var head = el("tr");
       ["Reviewer", "Done", "In progress", "Items"].forEach(function (h) { head.appendChild(el("th", null, h)); });
       table.appendChild(head);
-      s.perReviewer.forEach(function (/** @type {any} */ r) {
+      s.perReviewer.forEach(function (r) {
         var tr = el("tr", r.name === reviewer ? "me" : null);
         tr.appendChild(el("td", null, r.name === reviewer ? r.name + " (you)" : r.name));
         tr.appendChild(el("td", null, String(r.bucketsCompleted)));
@@ -874,8 +1036,8 @@
     function pollBoard() {
       // Skip while hidden (Page Visibility best practice — a background tab shouldn't poll) or mid-label.
       if (typeof document !== "undefined" && document.hidden) return;
-      if (view.mode !== "board" || authFailed) return;
-      refreshState().then(function () { if (view.mode === "board") { recomputeMode(); renderBoard(); } }).catch(function () { /* manual Refresh is the fallback */ });
+      if (view.screen.kind !== "board" || authFailed) return;
+      refreshState().then(function () { if (view.screen.kind === "board") { recomputeMode(); renderBoard(); } }).catch(function () { /* manual Refresh is the fallback */ });
     }
     function startAutoRefresh() {
       if (typeof window === "undefined") return;
@@ -904,14 +1066,14 @@
     // the gate is ATOMIC with the write (a demoted session's stale cached `mode` can't leak a write; the
     // CAS retry makes a loser refetch and decline here) — or when the primary claim/complete itself
     // declines (full bucket / at-capacity). Pure over args.
-    /** @param {any} s @param {any} b @param {string} rev @param {string} sid @param {number} now @returns {import("./calibration-core.js").CoordState|null} */
+    /** @param {CoordState} s @param {Bucket} b @param {string} rev @param {string} sid @param {number} now @returns {CoordState|null} */
     function claimWithPresence(s, b, rev, sid, now) {
       if (C.sessionHeldByOther(s, rev, sid, now)) return null; // a live foreign session owns this name — decline the whole write
       var r = C.claim(s, b.bucket_id, b.confirmations_required, rev, now, undefined, b.excluded_reviewers);
       if (!r.ok) return null;
       return C.refreshSession(r.state, rev, sid, now);
     }
-    /** @param {any} s @param {any} b @param {string} rev @param {string} sid @param {number} now @returns {import("./calibration-core.js").CoordState|null} */
+    /** @param {CoordState} s @param {Bucket} b @param {string} rev @param {string} sid @param {number} now @returns {CoordState|null} */
     function completeWithPresence(s, b, rev, sid, now) {
       if (C.sessionHeldByOther(s, rev, sid, now)) return null; // as above — a foreign active session declines the completion
       var r = C.complete(s, b.bucket_id, rev, b.confirmations_required);
@@ -920,12 +1082,7 @@
     }
 
     var openGeneration = 0; // a later openBucket supersedes an earlier in-flight one (the reviewer went Back + re-opened)
-    // Distinct from openGeneration: this counts labeling SESSIONS (each openBucket = a fresh session at idx 0),
-    // so a confirm-beat advance timer captured in one session can tell it's stale after a Back → re-open of the
-    // SAME bucket. Bucket object identity can't: BUCKETS entries are stable references, so a reopened bucket is
-    // `===` the one the timer captured even though idx was reset to 0 in between.
-    var labelGeneration = 0;
-    /** @param {any} b */
+    /** @param {Bucket} b */
     function openBucket(b) {
       if (!isActive()) { renderBoard(); return; } // auth/passive/electing can't claim — the board is the path forward
       // Optimistic: opening a bucket is navigation, not a sync step. Show the review screen immediately;
@@ -934,9 +1091,9 @@
       // (C.complete) — not the claim — is what keeps surplus confirmations out of the analysis, so a slow
       // or failed claim never costs the reviewer their place.
       var gen = ++openGeneration; // the "← Back to buckets" button is live during the claim, so a second open can race this one
-      labelGeneration++;          // a fresh labeling session — invalidates any confirm-beat advance timer from a prior one
-      view.bucket = b; view.idx = 0; view.notice = null; view.pending = null; noticeAnnounced = false;
-      renderLabel();
+      /** @type {LabelScreen} */
+      var screen = { kind: "label", bucket: b, idx: 0, notice: null, noticeAnnounced: false, pending: null, draftMember: null };
+      renderLabel(screen);
       beginClaiming();
       withState(function (s) {
         return claimWithPresence(s, b, reviewer, SESSION_ID, Date.now()); // null → declined (full bucket, or a live foreign session holds the name)
@@ -946,11 +1103,11 @@
         // Still active after a decline ⇒ the cause was a FULL bucket, not a take-over. Split/disposition
         // buckets need only one reviewer, so two reviewers opening the same one is an ordinary race. Keep
         // the reviewer on the screen (no bounce), but tell them their answers here may not be needed.
-        if (res.declined && isActive() && view.bucket === b && view.mode === "label") {
-          view.notice = "Someone else is already reviewing this bucket — your answers here may not be needed. Pick another from the board when you're ready.";
-          renderLabel();
+        if (res.declined && isActive() && view.screen === screen) {
+          screen.notice = "Someone else is already reviewing this bucket — your answers here may not be needed. Pick another from the board when you're ready.";
+          renderLabel(screen);
         }
-      }, function (e) {
+      }, function (/** @type {unknown} */ e) {
         if (gen !== openGeneration) return; // stale failure of a superseded open
         // A failed claim is NOT a verdict-sync failure: nothing is unsaved and nothing retries a claim, so
         // the amber verdict banner would be a lie. A genuine AUTH failure, though, must flip the page
@@ -958,7 +1115,7 @@
         // (→ read-only) and bounces off the writing screen (mirrors writePresence).
         if (isAuthError(e)) { markAuthFailed(); recomputeMode(); }
         else if (typeof console !== "undefined") console.warn("calibration: bucket claim did not land (labeling continues):", e);
-      }).catch(function (err) {
+      }).catch(function (/** @type {unknown} */ err) {
         // A resolution handler itself threw (a render bug) — surface it; two-arg then above means this
         // catch never sees the claim's own rejection, so it can't masquerade as a claim failure.
         if (typeof console !== "undefined") console.error("calibration: openBucket handler error:", err);
@@ -992,56 +1149,71 @@
     }
 
     // Advance/retreat, gated by the confirm beat so a nav action can't race a pending choice-advance.
-    function goNext() { if (choiceLocked) return; view.idx += 1; view.pending = null; renderLabel(); }
-    function goPrev() { if (choiceLocked) return; view.idx = Math.max(0, view.idx - 1); view.pending = null; renderLabel(); }
+    /** @param {LabelScreen} screen */
+    function resetItemState(screen) { screen.pending = null; screen.draftMember = null; }
+    /** @param {LabelScreen} screen */
+    function goNext(screen) { if (choiceLocked) return; screen.idx += 1; resetItemState(screen); renderLabel(screen); }
+    /** @param {LabelScreen} screen */
+    function goPrev(screen) { if (choiceLocked) return; screen.idx = Math.max(0, screen.idx - 1); resetItemState(screen); renderLabel(screen); }
+
+    // A partition item's reviewer changed a member's selector: keep the new draft for that item and
+    // focus that selector. During the confirm beat the draft is kept and the card is left as it is.
+    /** @param {LabelScreen} screen @param {ReviewItem} it the item shown @param {Partition} draft @param {string} memberId */
+    function changeDraft(screen, it, draft, memberId) {
+      view.drafts[it.item_id] = draft;
+      screen.draftMember = memberId;
+      if (!choiceLocked) renderLabel(screen);
+    }
 
     // The first step of a two-step choice: show the follow-up question for `verdict` (or, for null,
     // return to the first step). Nothing is recorded until the follow-up answer commits.
-    /** @param {string|null} verdict */
-    function choosePending(verdict) {
+    /** @param {LabelScreen} screen @param {string|null} verdict */
+    function choosePending(screen, verdict) {
       if (choiceLocked) return;
-      view.pending = verdict;
-      renderLabel();
+      screen.pending = verdict;
+      renderLabel(screen);
     }
 
     // One place both the click and the keydown paths commit an answer + advance.
-    /** @param {string} verdict @param {string|null} detail */
-    function chooseAndAdvance(verdict, detail) {
+    /** @param {LabelScreen} screen @param {ReviewItem} it the item shown @param {string} verdict @param {string|null} detail @param {Partition} [partition] */
+    function chooseAndAdvance(screen, it, verdict, detail, partition) {
       if (choiceLocked) return; // mid-confirm beat — ignore extra presses (see CHOICE_ADVANCE_MS)
-      var items = scaffoldsFor(view.bucket);
-      var it = items[view.idx];
-      if (!it) return;
-      /** @type {Decided} */
-      var decided = { verdict: verdict, detail: detail };
+      var decided = decidedOf(verdict, detail, partition);
       view.localVerdicts[it.item_id] = decided;
-      view.pending = null;
+      delete view.drafts[it.item_id]; // the committed answer is the item's state now
+      resetItemState(screen);
       delete view.unsaved[it.item_id];
-      if (isActive()) { verdictWriter.queue(view.bucket.bucket_id, reviewer, it.item_id, decided); markSaving(); } // gated: only the active session auto-saves
+      if (isActive()) { verdictWriter.queue(screen.bucket.bucket_id, reviewer, it.item_id, decided); markSaving(); } // gated: only the active session auto-saves
       flashChosen(verdict, detail); // confirm on the button…
       choiceLocked = true;
-      var genAtChoice = labelGeneration;
       setTimeout(function () { // …then advance — unless the reviewer left this labeling session during the beat
         choiceLocked = false;
-        // Bail if they left the label screen (Back/complete → mode changed) OR re-entered a new session
-        // (Back → re-open bumps labelGeneration), so a stale timer never advances a freshly-reset idx.
-        if (view.mode !== "label" || genAtChoice !== labelGeneration) return;
-        view.idx += 1;
-        renderLabel();
+        // Bail unless this session's screen is still the one shown: Back or completion replaces it, and a
+        // Back → re-open of the SAME bucket opens a new one at idx 0, so a stale timer never advances it.
+        if (view.screen !== screen) return;
+        screen.idx += 1;
+        renderLabel(screen);
       }, CHOICE_ADVANCE_MS);
     }
 
-    function renderLabel() {
-      view.mode = "label";
-      var items = scaffoldsFor(view.bucket);
+    // Whether the page still shows the completion of `bucket`.
+    /** @param {Bucket} bucket @returns {boolean} */
+    function completingOn(bucket) { return view.screen.kind === "completing" && view.screen.bucket === bucket; }
+
+    /** @param {LabelScreen} screen */
+    function renderLabel(screen) {
+      view.screen = screen;
+      var bucket = screen.bucket;
+      var items = scaffoldsFor(bucket);
+      const it = items[screen.idx]; // const so the not-undefined narrowing below persists into the widget's closures
       appEl.textContent = "";
       appEl.appendChild(button("← Back to buckets", function () { renderBoard(); }));
-      if (view.idx >= items.length) {
+      if (screen.idx >= items.length || !it) {
         if (isActive()) {
-          // Capture THIS bucket: the flush below can take seconds (its own retries), and the reviewer
-          // can click "Back" and open another bucket meanwhile — completion must target the bucket they
-          // actually finished, never wherever `view.bucket` has since roamed to.
-          var bucket = view.bucket;
-          view.mode = "completing"; // silences the keydown handler so no relabel slips into pending mid-flush
+          // Completion targets `bucket`: the flush below can take seconds (its own retries), and the
+          // reviewer can click "Back" and open another bucket meanwhile — completion must target the
+          // bucket they actually finished, never whichever bucket the page shows by then.
+          view.screen = { kind: "completing", bucket: bucket }; // silences the keydown handler so no relabel slips into pending mid-flush
           var saving = status("Saving your verdicts…");
           var prog = el("div", "progress indeterminate");
           prog.setAttribute("role", "progressbar"); prog.setAttribute("aria-label", "Saving verdicts"); // indeterminate: no aria-valuenow
@@ -1050,11 +1222,11 @@
           // The flush is a network round-trip of unknown length, so the bar is indeterminate (honest) —
           // after a few seconds, reassure rather than fake a percentage.
           var slow = setTimeout(function () {
-            if (view.mode === "completing" && view.bucket === bucket) saving.appendChild(el("div", "muted", "Taking longer than usual — your answers are safe, still saving."));
+            if (completingOn(bucket)) saving.appendChild(el("div", "muted", "Taking longer than usual — your answers are safe, still saving."));
           }, 4000);
           verdictWriter.flushNow().then(function () {
             clearTimeout(slow);
-            var stillHere = view.bucket === bucket && view.mode === "completing";
+            var stillHere = completingOn(bucket);
             var failed = scaffoldsFor(bucket).some(function (it) { return view.unsaved[it.item_id]; });
             if (failed) {
               if (stillHere) {
@@ -1071,33 +1243,34 @@
         renderBoard(); // reached only if demoted right at the end of a bucket — go back to the read-only board
         return;
       }
-      if (view.notice) {
+      if (screen.notice) {
         // renderLabel rebuilds #app on every item advance, so announce the notice ONCE (role=status ⇒
         // aria-live=polite on the render right after the decline) — re-adding role each rebuild would
         // re-read it aloud on every item. Same one-shot discipline as renderBanner's lastBannerSig.
-        var noticeEl = el("div", "notice", view.notice); // calm, non-blocking (e.g. a full-bucket claim race)
-        if (!noticeAnnounced) { noticeEl.setAttribute("role", "status"); noticeAnnounced = true; }
+        var noticeEl = el("div", "notice", screen.notice); // calm, non-blocking (e.g. a full-bucket claim race)
+        if (!screen.noticeAnnounced) { noticeEl.setAttribute("role", "status"); screen.noticeAnnounced = true; }
         appEl.appendChild(noticeEl);
       }
-      var it = items[view.idx];
       var main = el("div", null); appEl.appendChild(main);
       // scored items are BLIND — reveal:false, no machine answer shown, ever.
       W.renderReviewItem(document, main, it, (view.localVerdicts[it.item_id] || null), CONFIG, {
-        reveal: false, pending: view.pending, position: view.idx + 1, total: items.length,
-        onChoose: chooseAndAdvance,
-        onPending: choosePending,
-        onNext: goNext,
-        onPrev: goPrev,
+        reveal: false, pending: screen.pending, draft: view.drafts[it.item_id] || null, focusMember: screen.draftMember,
+        position: screen.idx + 1, total: items.length,
+        onChoose: function (verdict, detail, partition) { chooseAndAdvance(screen, it, verdict, detail, partition); },
+        onPending: function (verdict) { choosePending(screen, verdict); },
+        onDraft: function (draft, memberId) { changeDraft(screen, it, draft, memberId); },
+        onNext: function () { goNext(screen); },
+        onPrev: function () { goPrev(screen); },
       });
     }
 
     // Mark a specific finished bucket complete (all its verdicts confirmed landed). Takes the bucket
-    // explicitly — never reads view.bucket — because it runs after an async flush the reviewer may have
+    // explicitly — never the shown screen's — because it runs after an async flush the reviewer may have
     // navigated away from. DOM writes are guarded on the reviewer still viewing this completion screen,
     // so a stale resolution can't paint over the bucket they moved on to.
-    /** @param {any} bucket */
+    /** @param {Bucket} bucket */
     function markBucketComplete(bucket) {
-      function onThisScreen() { return view.bucket === bucket && view.mode === "completing"; }
+      function onThisScreen() { return completingOn(bucket); }
       withState(function (s) {
         return completeWithPresence(s, bucket, reviewer, SESSION_ID, Date.now()); // null → already at capacity via others; withState writes nothing
       }).then(function (res) {
@@ -1107,7 +1280,7 @@
         // The next reviewable bucket, if any — offered so a reviewer working through several doesn't detour
         // via the board each time. Shown only when one remains (gate + selector mirror the board's openable
         // rule); on the last bucket, only "Back to buckets" appears. Computed first so the message can adapt.
-        var nxt = isActive() ? C.nextOpenBucket(BUCKETS, state, reviewer, Date.now(), bucket.bucket_id) : null;
+        const nxt = isActive() ? C.nextOpenBucket(BUCKETS, state, reviewer, Date.now(), bucket.bucket_id) : null; // const: its narrowing reaches the button's closure
         appEl.appendChild(status(res.declined
           ? "This bucket was already completed by enough other reviewers while you were away — your answers are saved but it needed no more."
           : nxt ? "Bucket complete. Thank you!" : "Bucket complete. Thank you! Pick another from the board."));
@@ -1120,14 +1293,14 @@
           actions.appendChild(nextBtn);
         }
         appEl.appendChild(actions);
-      }).catch(function (e) {
+      }).catch(function (/** @type {unknown} */ e) {
         reportSyncFailure(e);
         if (onThisScreen()) appEl.appendChild(status("Your answers are saved, but marking the bucket complete failed — click Refresh on the board and it will reconcile."));
       });
     }
 
     function exportLocal() {
-      /** @type {{tool:string, version:number, reviewer:string, exported:string, decisions:Record<string, any>}} */
+      /** @type {{tool:string, version:number, reviewer:string, exported:string, decisions:Record<string, VerdictCell>}} */
       var out = { tool: "calibration-review", version: 1, reviewer: reviewer,
         exported: new Date().toISOString(), decisions: {} };
       Object.keys(view.localVerdicts).forEach(function (id) {
@@ -1144,7 +1317,7 @@
     // ---- helpers ----------------------------------------------------------------------------------
     /** @param {string} tag @param {string|null} [cls] @param {string} [text] @returns {HTMLElement} */
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-    /** @param {string} label @param {(this:GlobalEventHandlers, ev:MouseEvent)=>any} onclick @returns {HTMLButtonElement} */
+    /** @param {string} label @param {(this:GlobalEventHandlers, ev:MouseEvent)=>void} onclick @returns {HTMLButtonElement} */
     function button(label, onclick) { var b = document.createElement("button"); b.textContent = label; b.onclick = onclick; return b; }
     // A transient status message that assistive tech announces (role=status ⇒ implicit aria-live=polite).
     // Used for the completion flush ("Saving your verdicts…") and bucket-complete messages, painted into
@@ -1157,34 +1330,38 @@
       if (listeningKeys || typeof document === "undefined") return; // once per instance, however often boot() runs
       listeningKeys = true;
       document.addEventListener("keydown", function (e) {
-        if (view.mode !== "label") return;
-        var items = scaffoldsFor(view.bucket);
-        W.reviewItemKeydown(e, {
-          item: view.idx < items.length ? items[view.idx] : null,
-          config: CONFIG,
-          pending: view.pending,
-          onChoose: chooseAndAdvance,
-          onPending: choosePending,
-          onNext: goNext,
-          onPrev: goPrev,
-        });
+        if (view.screen.kind === "label") labelKeydown(e, view.screen);
       });
+    }
+    /** @param {KeyboardEvent} e @param {LabelScreen} screen */
+    function labelKeydown(e, screen) {
+      // Past the bucket's last item there is no live item (the completion screen is on its way):
+      // navigation keys still move, and no choice key reaches an item.
+      const it = scaffoldsFor(screen.bucket)[screen.idx]; // const: its narrowing reaches the choice closures
+      var nav = { config: CONFIG, pending: screen.pending, onNext: function () { goNext(screen); }, onPrev: function () { goPrev(screen); } };
+      W.reviewItemKeydown(e, it
+        ? Object.assign(nav, {
+          item: it,
+          onChoose: function (/** @type {string} */ verdict, /** @type {string|null} */ detail) { chooseAndAdvance(screen, it, verdict, detail); },
+          onPending: function (/** @type {string|null} */ verdict) { choosePending(screen, verdict); },
+        })
+        : Object.assign(nav, { item: null }));
     }
 
     // ---- GitHub identity ------------------------------------------------------------------------
     // The token's own login, as a validated reviewer name. Throws a typed error (AUTH on 401/403).
     /** @returns {Promise<string>} */
     function ghLogin() {
-      /** @type {any} */
+      /** @type {RequestInit} */
       var opts = { cache: "no-store", headers: { Authorization: "Bearer " + TOKEN, Accept: "application/vnd.github+json" } };
       var sig = timeoutSignal(); if (sig) opts.signal = sig;
-      return fetch(USER_API, opts).catch(function (e) {
-        throw makeErr("RETRYABLE", 0, "network: " + (e && e.message));
+      return fetch(USER_API, opts).catch(function (/** @type {unknown} */ e) {
+        throw makeErr("RETRYABLE", 0, "network: " + messageOf(e));
       }).then(function (r) {
         if (!r.ok) throw makeErr(C.classifyError(r.status), r.status, "GET /user → " + r.status);
-        return r.json();
-      }).then(function (/** @type {any} */ j) {
-        var v = C.validateReviewerName(j && j.login);
+        return r.json().then(function (/** @type {unknown} */ j) { return parseGhUser(j, r.status); });
+      }).then(function (user) {
+        var v = C.validateReviewerName(user.login);
         if (!v.ok) throw makeErr("OTHER", 0, "the token's GitHub login is not a usable reviewer name: " + v.reason);
         return v.name;
       });
@@ -1203,7 +1380,7 @@
           return r.ok ? r.state : null;
         });
         return registered.then(function () { reviewer = login; return !known; });
-      }).catch(function (e) {
+      }).catch(function (/** @type {unknown} */ e) {
         if (!isAuthError(e)) throw e;
         markAuthFailed();
         return false;
@@ -1211,9 +1388,19 @@
     }
 
     // ---- boot -------------------------------------------------------------------------------------
-    /** @param {string} url @returns {Promise<any>} */
+    /** @param {string} url @returns {Promise<unknown>} */
     function fetchData(url) {
       return fetch(url).then(function (r) { if (!r.ok) throw new Error(url + " → " + r.status); return r.json(); });
+    }
+
+    // The page's items. An item no answer fits (a kind the config does not define, or an item its kind
+    // cannot render) could not be answered: refuse the data set.
+    /** @param {unknown} raw @returns {ReviewItem[]} */
+    function parseScaffolds(raw) {
+      if (!isList(raw)) throw new Error(DATA.scaffolds + " is not a list of items");
+      var bad = raw.map(function (s) { return W.validateReviewItem(s, CONFIG); }).filter(function (r) { return !r.ok; });
+      if (bad.length) throw new Error(bad.length + " item(s) cannot be answered, e.g. " + /** @type {{reason: string}} */ (bad[0]).reason);
+      return /** @type {ReviewItem[]} */ (raw); // validateReviewItem has held each one to a ReviewItem
     }
 
     function boot() {
@@ -1222,13 +1409,9 @@
       if (!TOKEN) markAuthFailed();
       var firstVisit = false; // GitHub identity: the login was registered by this boot
       Promise.all([fetchData(DATA.scaffolds), fetchData(DATA.buckets), fetchData(DATA.manifest)]).then(function (res) {
-        SCAFFOLDS = res[0]; BUCKETS = res[1]; MANIFEST = res[2];
-        CONTESTED_CAMPAIGN_ID = (MANIFEST && MANIFEST.contested_campaign_id) || "";
-        // An item of a kind the config does not define could not be answered: refuse the data set.
-        var unknown = SCAFFOLDS.filter(function (s) { return !own(CONFIG.kinds, s.stratum); });
-        if (unknown.length) throw new Error(unknown.length + " item(s) have a kind the review config does not define, e.g. " + JSON.stringify(unknown[0].stratum));
-        SCAFFOLDS.forEach(function (s) { ITEMS_BY_ID[s.item_id] = s; });
-        return authFailed ? null : refreshState().catch(function (e) {
+        SCAFFOLDS = parseScaffolds(res[0]); BUCKETS = parseBuckets(res[1], DATA.buckets); MANIFEST = parseManifest(res[2], DATA.manifest);
+        ITEMS = indexItems(SCAFFOLDS, BUCKETS, DATA.scaffolds);
+        return authFailed ? null : refreshState().catch(function (/** @type {unknown} */ e) {
           // Coordination state failed to load — surface it and stop. An empty board would show every
           // bucket as available and invite double-claims, so a load failure must halt boot.
           reportSyncFailure(e);
@@ -1252,9 +1435,9 @@
         else if (reviewer) renderPractice(0);
         else if (IDENTITY === "typed") renderRoster();
         if (!authFailed) startAutoRefresh();
-      }).catch(function (e) {
+      }).catch(function (/** @type {unknown} */ e) {
         appEl.textContent = "";
-        appEl.appendChild(el("div", "error", "Could not load calibration data: " + e.message));
+        appEl.appendChild(el("div", "error", "Could not load calibration data: " + messageOf(e)));
         appEl.appendChild(button("Reload", function () { location.reload(); }));
       });
     }

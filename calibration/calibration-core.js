@@ -13,8 +13,9 @@
    refuses them, bucketStatus reports "excluded", nextOpenBucket skips it). A second-round bucket
    excludes the reviewers whose own labels it re-reviews.
 
-   A verdict cell is { verdict, detail?, timestamp }: `detail` carries the follow-up answer of a
-   two-step choice and is absent for a one-step one.
+   A verdict cell is { verdict, detail?, partition?, timestamp }: `detail` carries the follow-up answer
+   of a two-step choice and is absent for a one-step one; `partition` carries a partition kind's
+   answer, each member's id to the id of the member that is its project.
 
    The `sessions` map is the cross-browser single-active-session marker: a capacity-1 claim-lease keyed
    by sessionId with a short staleness horizon (SESSION_TTL_MS). It is refreshed lazily and NEVER
@@ -34,14 +35,14 @@
  * @typedef {{ claimants: Claimant[], completed_by: string[] }} BucketState
  * @typedef {{ sessionId: string, ts: number }} SessionRec
  * @typedef {{ roster: string[], buckets: Record<string, BucketState>, sessions?: Record<string, SessionRec> }} CoordState
- * @typedef {{ verdict: string, detail?: string, timestamp: number }} VerdictCell
+ * @typedef {{ verdict: string, detail?: string, partition?: Record<string, string>, timestamp: number }} VerdictCell
  * @typedef {{ ok: boolean, reason?: string, state: CoordState }} CoordResult
  * @typedef {{ bucket_id: string, stratum: string, item_ids: string[], confirmations_required: number,
  *   excluded_reviewers?: string[] }} Bucket
  * @typedef {"available"|"mine"|"claimed"|"complete"|"excluded"} BoardState
  */
 
-(function (/** @type {any} */ root) {
+(function (/** @type {typeof globalThis & { CalibrationCoord?: typeof import("./calibration-core.js") }} */ root) {
   "use strict";
 
   var DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // a claim older than this with no completion is reclaimable
@@ -350,37 +351,48 @@
   }
 
   /**
+   * Whether `value` is a partition answer: a non-empty map from member ids to member ids in which
+   * every member maps to a member that maps to itself.
+   * @param {unknown} value @returns {value is Record<string, string>}
+   */
+  function isPartition(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    var map = /** @type {Record<string, unknown>} */ (value);
+    var keys = Object.keys(map);
+    return keys.length > 0 && keys.every(function (k) {
+      var target = map[k];
+      return typeof target === "string" && Object.prototype.hasOwnProperty.call(map, target) && map[target] === target;
+    });
+  }
+
+  /**
    * Merge one reviewer's verdict cells into an accumulator, latest timestamp winning per item (a
    * same-reviewer multi-device union — a re-pull can't double-count). The winning cell keeps its
-   * string `detail`; a cell without one stays without one.
+   * string `detail` and its `partition`; a cell without one stays without one. A cell whose
+   * `partition` is no partition is dropped whole, so a partition answer always carries one.
    * @param {Record<string, VerdictCell>} acc
-   * @param {Record<string, VerdictCell>} decisions
+   * @param {Record<string, unknown>} decisions - a verdict file's cells as read; a cell that is not an
+   *   object with a string `verdict` is dropped
    * @returns {Record<string, VerdictCell>}
    */
   function unionVerdicts(acc, decisions) {
     acc = acc || {};
     Object.keys(decisions || {}).forEach(function (/** @type {string} */ itemId) {
-      var cell = decisions[itemId];
-      if (!cell || typeof cell.verdict !== "string") return;
+      var raw = decisions[itemId];
+      if (!raw || typeof raw !== "object") return;
+      var cell = /** @type {Record<string, unknown>} */ (raw);
+      if (typeof cell.verdict !== "string") return;
+      if (cell.partition !== undefined && !isPartition(cell.partition)) return;
       var ts = typeof cell.timestamp === "number" ? cell.timestamp : 0;
       var existing = acc[itemId];
       if (existing && ts < existing.timestamp) return;
       /** @type {VerdictCell} */
       var next = { verdict: cell.verdict, timestamp: ts };
       if (typeof cell.detail === "string") next.detail = cell.detail;
+      if (isPartition(cell.partition)) next.partition = Object.assign({}, cell.partition);
       acc[itemId] = next;
     });
     return acc;
-  }
-
-  // The campaign id to stamp on a verdict file, or "" for a calibration bucket. Contested verdict
-  // files carry the contested campaign id so ingest (publish_contested_review.py) can refuse verdicts
-  // reviewed against a different run's scaffolds — their item ids index a different run's members.
-  // Calibration buckets ("{stratum}-NN") are never stamped; only "contested-" buckets are.
-  /** @param {string} bucketId @param {string} contestedCampaignId @returns {string} */
-  function contestedCampaignStamp(bucketId, contestedCampaignId) {
-    var isContested = typeof bucketId === "string" && bucketId.indexOf("contested-") === 0;
-    return isContested && contestedCampaignId ? contestedCampaignId : "";
   }
 
   // ---- single-active-session presence (a capacity-1 claim-lease keyed by sessionId) ----------------
@@ -577,7 +589,6 @@
     release: release,
     complete: complete,
     unionVerdicts: unionVerdicts,
-    contestedCampaignStamp: contestedCampaignStamp,
     classifyError: classifyError,
     isRetryable: isRetryable,
     activeSession: activeSession,

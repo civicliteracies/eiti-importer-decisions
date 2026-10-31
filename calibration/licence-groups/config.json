@@ -1,0 +1,29 @@
+{
+  "owner": "civicliteracies",
+  "repo": "eiti-calibration",
+  "statePath": "licence-groups/state.json",
+  "verdictDir": "licence-groups/verdicts",
+  "dataUrls": {
+    "scaffolds": "scaffolds.json",
+    "buckets": "buckets.json",
+    "manifest": "manifest.json"
+  },
+  "storagePrefix": "calib:licence-groups:",
+  "lockPrefix": "calib:licence-groups:writer:",
+  "identity": "typed",
+  "config": {
+    "kinds": {
+      "licence_group": {
+        "question": "These projects are connected by a licence. A project is the activities under one licence, contract or concession, or under agreements the country documents as one. Which of them are one project?",
+        "partition": {
+          "verdict": "partition",
+          "own": "Its own project",
+          "joinedTo": "Same project as",
+          "save": "Save this answer"
+        }
+      }
+    },
+    "unsure": "unsure"
+  },
+  "practice": []
+}

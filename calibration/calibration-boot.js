@@ -15,7 +15,7 @@
    The module.exports guard is how the Node tests drive start() against a stubbed fetch; in the browser
    start() runs once on load. */
 
-(function (/** @type {any} */ root) {
+(function (/** @type {typeof globalThis & { CalibrationApp?: typeof import("./calibration.js") }} */ root) {
   "use strict";
 
   var META = 'meta[name="calibration-config"]';
@@ -40,29 +40,30 @@
    * The parsed config with its dataUrls made absolute against the config's own URL, so a config can
    * name its data files next to itself wherever the page that loads it lives. Every other field
    * passes through to CalibrationApp.create, which validates the whole shape.
-   * @param {any} json
+   * @param {unknown} json
    * @param {URL} url - where the config was fetched from
-   * @returns {any}
+   * @returns {Record<string, unknown>}
    */
   function resolveOptions(json, url) {
     if (!json || typeof json !== "object" || Array.isArray(json)) throw new Error("the review config is not a JSON object");
-    var d = json.dataUrls;
-    if (!d || typeof d !== "object") throw new Error("the review config has no dataUrls object");
+    var config = /** @type {Record<string, unknown>} */ (json); // a JSON object, checked above
+    var d = config.dataUrls;
+    if (!d || typeof d !== "object" || Array.isArray(d)) throw new Error("the review config has no dataUrls object");
+    var dataUrls = /** @type {Record<string, unknown>} */ (d); // a JSON object, checked above
     /** @type {Record<string, string>} */
     var resolved = {};
     ["scaffolds", "buckets", "manifest"].forEach(function (k) {
-      if (typeof d[k] !== "string" || !d[k]) throw new Error("the review config's dataUrls." + k + " must be a non-empty string");
-      resolved[k] = new URL(d[k], url).href;
+      var href = dataUrls[k];
+      if (typeof href !== "string" || !href) throw new Error("the review config's dataUrls." + k + " must be a non-empty string");
+      resolved[k] = new URL(href, url).href;
     });
-    var options = Object.assign({}, json);
-    options.dataUrls = resolved;
-    return options;
+    return Object.assign({}, config, { dataUrls: resolved });
   }
 
-  /** Show a boot failure where the page shows its other failures. @param {Document} doc @param {any} err */
+  /** Show a boot failure where the page shows its other failures. @param {Document} doc @param {unknown} err */
   function report(doc, err) {
     var banner = doc.getElementById("banner");
-    var text = "This review page could not start: " + (err && err.message ? err.message : String(err));
+    var text = "This review page could not start: " + (err instanceof Error && err.message ? err.message : String(err));
     if (banner) {
       banner.className = "banner error";
       banner.textContent = text;
@@ -82,12 +83,12 @@
       return fetch(url.href, { cache: "no-store" }).then(function (r) {
         if (!r.ok) throw new Error("the review config " + url.pathname + " answered " + r.status);
         return r.json().catch(function () { throw new Error("the review config " + url.pathname + " is not valid JSON"); });
-      }).then(function (json) {
+      }).then(function (/** @type {unknown} */ json) {
         var app = root.CalibrationApp;
         if (!app || typeof app.create !== "function") throw new Error("calibration.js is not loaded before calibration-boot.js");
         app.create(resolveOptions(json, url)).boot();
       });
-    }).catch(function (err) { report(doc, err); });
+    }).catch(function (/** @type {unknown} */ err) { report(doc, err); });
   }
 
   var api = { configUrl: configUrl, resolveOptions: resolveOptions, start: start };
