@@ -1,55 +1,59 @@
 {
   "base_rate": {
-    "avg_distinct_names": 1.3,
-    "single_pct": 81,
-    "single_spelling": 11292,
-    "varied": 2723,
-    "varied_pct": 19
+    "avg_distinct_names": 1.32,
+    "single_pct": 80,
+    "single_spelling": 11050,
+    "varied": 2829,
+    "varied_pct": 20
   },
   "extremes": {
     "most_countries": {
-      "canonical": "Chevron",
+      "canonical": "ExxonMobil",
       "countries": [
-        "AGO",
-        "COG",
+        "CIV",
         "GBR",
         "IRQ",
-        "LBR",
-        "SLE",
+        "MDG",
+        "MOZ",
+        "MRT",
+        "NLD",
+        "PNG",
         "USA"
       ],
-      "distinct_names": 3,
-      "mentions": 33,
+      "distinct_names": 4,
+      "mentions": 231,
       "spellings": [
-        "CHEVRON",
-        "CHEVRON CORPORATION",
-        "Chevron"
+        "EXXON MOBIL",
+        "EXXON MOBIL CORPORATION",
+        "EXXONMOBIL",
+        "ExxonMobil"
       ],
       "type": "company",
       "type_label": "companies"
     },
     "most_mentioned": {
-      "canonical": "NAM",
+      "canonical": "Direction Generale des Douanes (DGD)",
       "countries": [
-        "NLD"
+        "GIN"
       ],
-      "distinct_names": 3,
-      "mentions": 2461,
+      "distinct_names": 4,
+      "mentions": 4749,
       "spellings": [
-        "NAM",
-        "Nederlandse Aardolie Maatschappij B.V.",
-        "Nederlandse Aardolie Maatschappij BV (NAM)"
+        "Direction Generale des Douanes (DGD)",
+        "Direction Generale des douanes",
+        "Direction Générale de Douane (DGD)",
+        "Direction Générale des Douanes (DGD)"
       ],
-      "type": "company",
-      "type_label": "companies"
+      "type": "gov_entity",
+      "type_label": "government agencies"
     },
     "most_names": {
-      "canonical": "Direction Generale des Recettes Administratives (DGRAD)",
+      "canonical": "DGRAD - Direction Générale des Recettes Administratives, Participations, Judiciaires et Domaniales",
       "countries": [
         "COD"
       ],
       "distinct_names": 9,
-      "mentions": 591,
+      "mentions": 1020,
       "spellings": [
         "DGRAD - Direction Generale des Recettes Administratives, Judiciaires, Domaniales et de Participation",
         "DGRAD - Direction Générale des Recettes Administratives, Judiciaires, Domaniales et de Participation",
@@ -65,21 +69,21 @@
       "type_label": "government agencies"
     }
   },
-  "generated_from": "d921a04f7e75bb15",
+  "generated_from": "4c471ab227350f8f",
   "hard_calls": {
-    "kept_apart": 157,
-    "multinationals": 77,
-    "splits": 119
+    "kept_apart": 131,
+    "multinationals": 88,
+    "splits": 116
   },
   "schema_version": 1,
   "totals": {
     "by_type": {
       "company": {
-        "entities": 9123,
+        "entities": 8989,
         "label": "companies"
       },
       "gov_entity": {
-        "entities": 815,
+        "entities": 814,
         "label": "government agencies"
       },
       "project": {
@@ -87,14 +91,14 @@
         "label": "projects"
       }
     },
-    "distinct_name_forms": 18249,
-    "entities": 14015,
-    "mentions": 153901
+    "distinct_name_forms": 18352,
+    "entities": 13880,
+    "mentions": 316595
   },
   "variation_kinds": [
     {
-      "a": "Toguna",
-      "b": "TOGUNA",
+      "a": "Shell",
+      "b": "SHELL",
       "key": "case",
       "label": "Case & accents"
     },
