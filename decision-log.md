@@ -1636,13 +1636,15 @@ Rows whose currency cell is blank or carries an absence word ("Not applicable", 
 
 <!-- scenario: submit-a-report; topic: entity-resolution -->
 
-**Situation:** EITI report templates leave the entity-name column open for free text. Some operators populate it with rollup-row labels — `"Companies with aggregate information (US$)"`, `"Other companies"`, `"Aggregate Companies in New Soles (iii)"`, `"Various ministries"`, `"Various (see footnote)"`, `"Sub-total"` — rather than a specific company name. The row's financial figures are the sum of multiple payers the operator chose not to itemise; the label describes the rollup, not a legal entity.
+**Situation:** EITI report templates leave the entity-name column open for free text. Some operators populate it with rollup-row labels — `"Ministries and Agencies"`, `"Nom de sociétés non communiqué"`, `"Companies with aggregate information (US$)"`, `"Other companies"`, `"Aggregate Companies in New Soles (iii)"`, `"Various ministries"`, `"Various (see footnote)"`, `"Sub-total"` — rather than a specific company name. The row's financial figures are the sum of multiple payers the operator chose not to itemise; the label describes the rollup, not a legal entity.
 
 **Decision:** Entity-name recognition detects these labels and recognises no entity from them, the same outcome it gives placeholders and absence words. Callers (the inventory builder, the dedup pipeline, the runtime alias lookup) treat an unrecognised name as "skip this row" — the label never gets an entity ID of its own, never participates in dedup clustering, never surfaces in the enricher manifest. The cell keeps the report's label, and the row's money stays on a rollup bucket of its report — a company, agency or project of kind `not_disaggregated` — one per label the report wrote and named by it. Two lump sums a report itemised stay two buckets: Cameroon's 2012 report puts "Divers acheteurs" in Oil & Gas and "Divers sociétés minières non retenues …" in Mining, and each bucket keeps its sector. Labels that differ only by case, accents or punctuation are one bucket. An agency or project bucket is placed in the report's country.
 
 **Rationale:** Treating a rollup-row label as a company name caused two failure modes downstream: the dedup pipeline merged rollup labels across reports (the same phrasing reappeared each year), producing a synthetic "Companies with aggregate information (US$)" cluster; and the enricher minted an eiti_id for that synthetic cluster, which then surfaced in dashboards as if it were a real company. Filtering at recognition is the earliest seam where the rollup-row shape is still recognisable — once the name moves into clustering, the original cell context is lost. A bucket per label, rather than one per report, keeps what the report declared for each lump sum: one bucket for both of Cameroon's 2012 labels held two sectors, so its 34 payments carried none.
 
 The pattern set is deliberately conservative — only phrases that real corporate names don't use as their leading tokens. `"TotalEnergies"`, `"Sub-Total Resources Ltd"`, `"Other Companies Holdings"`, `"Aggregate Industries UK"`, `"Small Producers Cooperative"`, and any `"X Aggregates"` quarry name pass through unchanged because each pattern either anchors at end-of-string (with optional parenthesised note) or requires a specific rollup-context continuation word. `"Various"` is recognised only when followed by a fixed list of rollup continuations (ministries, companies, states, agencies, entities, payers, reporting, departments), end-of-string, or punctuation; a hypothetical `"Various Foods Ltd"` passes through. The same rule covers the lump-sum labels the reports write in other words: a bare `"Other"`, `"Others"` or `"Autres"`, `"Other projects"`, `"Other Govt. Agency"`, `"Autres administrations"`, `"Divers acheteurs"`, `"Unallocated"` — each end-anchored or naming its rollup words, so `"Others Ltd"`, `"Total Upstream"` and `"Autres Mines SA"` pass through. A bare `"Total"` has no pattern: in every report that writes one in a payer column (Iraq 2011, Myanmar 2014–16, the Netherlands 2017) it is the oil major, and São Tomé's `"Total Operators"` (2019, 2020) is the same company, a Companies-sheet row typed Private/Oil beside Kosmos, Galp and BP.
+
+A rollup label filling a company list cell gives neither a company nor a bucket: a list names the companies beside a project and carries no money of its own, so the project takes no company link from it, and the cell has a finding saying so. A label no pattern catches can be judged one by the panel (below).
 
 **Technical detail:** The patterns are store data: `ROLLUP_LABEL_PATTERNS` in `packages/stores/eiti/src/eiti/value_meaning.py`, carried as the rollup patterns of the store's bucket tier (`BucketTier`) on `EITI_VALUE_MEANING`. `core.entity_norm.is_aggregate_label()` reads them from the value-meaning vocabulary it is handed, and `recognize_entity_name` rejects every bucket cell (a rollup label, an aggregate display or an anonymous display, `is_bucket`) alongside absence words before it computes an identity key, so the identity fold (`_identity_key`) stays pure. The patterns read the cell's `match_key` fold, so a typographic apostrophe or dash and a decomposed accent match as their plain spellings do. The parser flags a rollup cell `AGGREGATE_LABEL_DETECTED`, an observation that never blocks review; the mapper mints its bucket by `core.ids.bucket_entity_id` from the report's `existence_key`, the kind word and the label's `fold_comparison_form` (an anonymous bucket takes no label, so it stays one per report). An archive project cell the census judged generic is written as `not_disaggregated_label(<label>)`, a form one pattern recognises, unless the bucket tier already reads it as an aggregate (`classify_cell`): such a cell (Zambia's "Other projects") stays as written and is flagged once, by the recogniser, so a live and an archive upload of the report mint the same bucket. Negative-triangulation tests against real corporate names live in `tests/unit/test_entity_norm.py::TestIsAggregateLabel`. Distinct from the in-file numeric-total crosscheck above: that compares values across rows within one file; this filters cell contents at name lookup.
 
@@ -2116,7 +2118,7 @@ Every import run also has an id of its own. The tool stamps that id on each coho
 - **Per-language alias resolution.** Four dictionaries (`EN_ALIAS_LOOKUP`, `FR_ALIAS_LOOKUP`, `ES_ALIAS_LOOKUP`, `RU_ALIAS_LOOKUP`) map non-canonical text to canonical EN values. `"Bauxite"` resolves to `"Aluminium ores and concentrates (2606)"`; `"Pétrole brut"` resolves to `"Crude oil (2709)"`; `"Oil and gas"` resolves to the canonical `"Oil & Gas"` Sector. The substitution emits one of `EN_ALIAS_RESOLVED` / `FR_ALIAS_TRANSLATED` / `ES_ALIAS_TRANSLATED` / `RU_ALIAS_TRANSLATED` so the dashboard can categorise the source language.
 - **Absence-word normalisation.** Typed variants of "Not available" (`"not availble"`, `"not avaiable"`, `"not reported"`, `"NR"`, `"NIL"`, `"not communicated"`, FR/ES variants) and "Not applicable" (`"n/a"`, `"n.a."`, `"na"`, `"not aplicable"`, `"no se aplica"`) are written as the canonical word of the kind they spell when the field's union allows it. A spelling of a kind the field does not allow (`"Not applicable"` or `"n/a"` typed into a field that only accepts `"Not available"`, or vice versa) is written as the word the field does allow. The parser flags every such cell with one code, `ABSENCE_WORD_SPELLING`, listing the absence words the field accepts; the cleaner picks the word from the cell's text — the spelled kind's word when accepted, else its substitute. Free-text fields (typed via the `OptionalStrNV` / `OptionalStrNA` / `OptionalStrNVorNA` / `OptionalStrEmail` aliases) carry the same correction — the alias's BeforeValidator raises `AbsenceSpellingError` on a variant cell, which the parser classifies like any other absence spelling; without that, absence spellings would silently land in the `str` arm and reach storage as garbage. A field with a required shape (a four-digit year, an email address) is treated the same way: an absence spelling typed into it is corrected like any other, not reported as a malformed year or address.
 - **Fuzzy enum correction with gap-to-runner-up.** Misspellings within ~80 WRatio of a canonical enum value get auto-suggested, but only if the runner-up is at least 10 WRatio points behind. The gap check suppresses silent mis-correction when two candidates are too close to distinguish; those cells fall through to the dropdown.
-- **List-typed cell segmentation.** Companies-sheet `commodities` and Projects-sheet `affiliated_companies` are typed as lists. The parser segments the cell on `,;`, ` and `, ` et `, ` y `, `&`, `/` and validates each token independently. Resolved tokens accumulate into the matching junction table. Noise tokens inside a typed-element list (empty, absence word mid-list) are filtered at the parser's Typer stage (`type_enum_list` / `type_country_list`) so they don't trip alias or fuzzy correction.
+- **List-typed cell segmentation.** Companies-sheet `commodities` and Projects-sheet `affiliated_companies` are typed as lists. The parser segments a `commodities` cell on `,;`, ` and `, ` et `, ` y `, `&`, `/` and validates each token independently. An `affiliated_companies` cell reads as one name per company (`eiti.parsing.company_list`): outside a share only `,;` separate, so `Total / Shell JV` stays one name. Resolved tokens accumulate into the matching junction table. Noise tokens inside a typed-element list (empty, absence word mid-list) are filtered at the parser's Typer stage (`type_enum_list` / `type_country_list`) so they don't trip alias or fuzzy correction.
 - **Compound-value detection on single-value fields.** When a field that the schema models as scalar carries two or more canonical values — the cell read the way a list cell is, on `,;`, ` and `, ` et `, ` y `, `&`, `/`, with a known name such as `Oil and gas` kept whole — the tool emits `FIELD_MULTI_VALUE`. The operator must split the source row before the file can import. Compound detection is alias-aware: `"Iron Ore, Gold Ore"` (alias-only) and `"Iron (2601), Gold (7108)"` (canonical-only) both trigger the same code.
 - **Template placeholder and instruction removal.** Cells containing template guidance like `"add commodities here, volume"` or `<placeholder>` syntax are dropped: the cleaner clears the template residue so it doesn't import as data.
 - **Pre-seeded canonical dimensions.** `metadata_commodities` is pre-seeded at API startup with one row per `Commodity` enum member. The importer never creates `metadata_commodities` rows from cell text, so a typo in one country file can't leak into the canonical commodity list and pollute aggregations for every country thereafter.
@@ -2459,6 +2461,73 @@ What the user can answer in the dashboard is bounded by what the tool offered:
 **Rationale:** What is shown must not depend on import or delete order.
 
 **Technical detail:** `metadata_<type>_import_facts` and `metadata_entity_import_spellings`; `core.entity_derivation.derive_current_row`, read through `core.entity_versions.rederive_entities`.
+
+### A company list with shares reads as one name per company
+<!-- scenario: trust-the-data; topic: entity-resolution -->
+
+**Situation:** A project's company list can state each company's share: `Chevron 39,20%`, `Al-Waha (%75) / SOMO (%25)`, `Sonangol P&P 5% SOMOIL 31,33%`. Read on every comma, these became companies called `Chevron 39` and `20%`. A comma before a legal form did the same, so `Haiyu Mozambique Mining Co, Lda` gave a company called `Lda`, and one such id held 36 tokens from 11 unrelated companies.
+
+**Decision:** The list reads as one name per company, and the share is not part of a name. A comma between digits does not separate. A share ends the name before it, and text from a share to the next separator is a remark. A bare legal form names no company. The ids these spellings registered are retired, or merged into the company they spell. The cell's text is kept on a finding, so what the report said about shares stays readable. The database stores no share.
+
+**Rationale:** A fragment holding an entity's identity takes that entity's links and money. In Angola, Iraq and Congo, most company links on these lists pointed at a fragment. Iraq's operator of `Al-Waha (%75) / SOMO (%25)` is now the first-listed company, not a consortium company.
+
+**Technical detail:** `eiti.parsing.company_list` owns the reading, and the shaper, the enricher and the record generator call it. `transforms/company_list_shares.py` emits `COMPANY_LIST_SHARES_READ`.
+
+---
+
+### A licence number in the company list moves to the licence cell
+<!-- scenario: trust-the-data; topic: entity-resolution -->
+
+**Situation:** 13 Angolan projects hold their licence in the company list and `-` in the licence cell, so `067/10/07/T.E/ANG-MIREMPET/2023` was registered as a company.
+
+**Decision:** The number moves to the licence cell, and the project loses a false operator and gains its licence. The ids it registered are retired.
+
+**Rationale:** The report states a licence, and a licence belongs on the project. `185/03/50` then connects the two projects that hold it.
+
+**Technical detail:** `transforms/licence_in_company_list.py` emits `LICENCE_MOVED_FROM_COMPANY_LIST`.
+
+---
+
+### A fuzzy match never attaches a name by itself
+<!-- scenario: trust-the-data; topic: entity-resolution -->
+
+**Situation:** A name on an upload that scored 86 or more against one registered entity attached to it automatically. `Transport pétrolier` attached to `Petro SA` with US$62.99M, and `LUILU RESSOURCES` to `Esso`.
+
+**Decision:** A fuzzy score only proposes. On a live upload the operator picks, and an unanswered question takes no match. On an archive import the name becomes its own entity. An exact match still attaches, unless a scope word or a registration number holds two companies apart.
+
+**Rationale:** A false negative can be recovered and a false positive puts money on the wrong company, and all 64 such names on the corpus hold their own row.
+
+**Technical detail:** One candidate returns `MATCH_AMBIGUOUS`. `MATCH_SINGLE_CANDIDATE` is retired: nothing emits it, and its stored rows go with the rebuild this change ships by. The one-company rule is `distinct_companies` in `eiti.dedup.domain_rules`, read by the enricher and the landing gate.
+
+---
+
+### What enters the list of known entities is asked of a panel
+<!-- scenario: trust-the-data; topic: entity-resolution -->
+
+**Situation:** Whatever the classifier reads as real can be registered, so a label no pattern catches became a company or an agency: `Subnational level` (Mongolia, 935 rows), `Regional State Tax Authority` (Ethiopia, 201 rows), `Sole Risk` (Nigeria, 143 rows).
+
+**Decision:** A landing asks of every name it would register whether it names one entity, a label for entities the report does not name, nothing of its column, or a list of named entities. Two models answer without seeing each other, searching before they take a name away, and a person's verdict outranks them. A name judged a label reads as one in a column of its type: the row keeps its money on the report's bucket, and the name leaves the entity lists. A name the models split on, and a list, keep their place and go to a person.
+
+**Rationale:** A label in a report's rows is real money with no single owner, so it needs a bucket, not an entity. A retirement cannot be taken back and can delete rows, so an answer leaves the id registered and taking it back restores it. A model never removes an entity: only a curator's record retires one. Review never blocks a landing, but an unasked name does.
+
+A project cell holding only the name of a company, a person or a trading business is the same question, asked with the registered companies of that name beside it: `Alphonso Clinton` and `ExxonMobil` name no project, and `Oyu Tolgoi`, which also names a company, does. A label applies to its own column type only, so a company-column label says nothing of a project of that name. A new entity whose whole name matches a label of its type reads as the label: its cell has a finding, and a person's verdict reverses it.
+
+**Technical detail:** `tools/dedup/_nameness_panel.py`, `eiti/families/found_rollup_labels.toml`, `nameness_verdicts.toml`, and the review page `calibration/nameness/`. See `docs/guides/dedup-pipeline.md`.
+
+---
+
+### A company's name in a payment's project cell names no project
+<!-- scenario: trust-the-data; topic: entity-resolution -->
+
+**Situation:** A project list holding a company's name in its project cell has that cell moved to the list's companies. A payment row's project cell had no such rule, so `Perenco T&T Limited` on a payment line became a project of that name. 88 such projects held 1,455 payment rows.
+
+**Decision:** On an archive import, a payment's project cell a project list would read as a company is filled as not available. The payment keeps its money and its company, and names no project. A cell the project cell-type census judged a clean project stays.
+
+**Rationale:** The row already names its payer in its own column. A company is no project, and a project list built from its own payment lines would claim otherwise.
+
+**Technical detail:** `_apply_reference` in `transforms/project_celltype_census.py` reads `looks_like_company` from `transforms/company_in_project_name_reroute.py` and emits `NON_PROJECT_REFERENCE_NVED`.
+
+---
 
 ### A payment line names a company or agency, never a project
 <!-- scenario: trust-the-data; topic: entity-resolution -->

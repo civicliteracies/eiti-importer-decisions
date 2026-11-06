@@ -1,0 +1,29 @@
+{
+  "owner": "civicliteracies",
+  "repo": "eiti-calibration",
+  "statePath": "nameness/state.json",
+  "verdictDir": "nameness/verdicts",
+  "dataUrls": {
+    "scaffolds": "scaffolds.json",
+    "buckets": "buckets.json",
+    "manifest": "manifest.json"
+  },
+  "storagePrefix": "calib:nameness:",
+  "lockPrefix": "calib:nameness:writer:",
+  "identity": "typed",
+  "config": {
+    "kinds": {
+      "nameness": {
+        "question": "What does this name stand for in the report's column?",
+        "choices": [
+          ["names_one", "One entity"],
+          ["stands_for_several", "A label for entities the report does not name"],
+          ["names_nothing", "No entity: a share, a remark or a heading"],
+          ["lists_named", "A list naming two or more entities"]
+        ]
+      }
+    },
+    "unsure": "unsure"
+  },
+  "practice": []
+}
