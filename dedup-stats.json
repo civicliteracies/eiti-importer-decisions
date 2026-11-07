@@ -2,8 +2,8 @@
   "base_rate": {
     "avg_distinct_names": 1.31,
     "single_pct": 77,
-    "single_spelling": 10497,
-    "varied": 2834,
+    "single_spelling": 10498,
+    "varied": 2835,
     "varied_pct": 21
   },
   "extremes": {
@@ -21,7 +21,7 @@
         "USA"
       ],
       "distinct_names": 4,
-      "mentions": 237,
+      "mentions": 240,
       "spellings": [
         "EXXON MOBIL",
         "EXXON MOBIL CORPORATION",
@@ -69,7 +69,7 @@
       "type_label": "government agencies"
     }
   },
-  "generated_from": "55028199221aadc2",
+  "generated_from": "3a8aca4a58e2373f",
   "hard_calls": {
     "kept_apart": 129,
     "multinationals": 89,
@@ -87,13 +87,13 @@
         "label": "government agencies"
       },
       "project": {
-        "entities": 3975,
+        "entities": 3973,
         "label": "projects"
       }
     },
-    "distinct_name_forms": 17811,
-    "entities": 13572,
-    "mentions": 307499
+    "distinct_name_forms": 17815,
+    "entities": 13570,
+    "mentions": 307631
   },
   "variation_kinds": [
     {

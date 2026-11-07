@@ -1558,11 +1558,11 @@ Rows whose currency cell is blank or carries an absence word ("Not applicable", 
 
 **Situation:** About 1,100 v2 Projects/Companies15 rows across the historical EITI corpus carry a company name in the project_name cell — the operator typed the company (often with a trailing Companies-House ID like `(00140141)` or a legal-form suffix like `Limited` / `GmbH` / `SARL`) where the project name belonged. The cell is recognisably a company identifier, not a project description.
 
-**Decision:** A parser-side transform (`reroute_company_in_project_name`) detects the company shape via two signals — a trailing UK Companies-House ID pattern, or a trailing legal-form suffix from the shared `LEGAL_FORM_SUFFIXES` list — and moves the value to the `affiliated_companies` cell on the same row. When `affiliated_companies` is blank, the moved value becomes the operator (prepended); when populated, it's appended as a partner. Tokens already present in `affiliated_companies` (NFKC + casefold match) are dropped silently. `project_name` becomes blank; under `accept_legacy_archive_imports`, the cleaner then fills the cell with the file's anonymous placeholder, `"Anonymous project"`, so the row imports.
+**Decision:** A parser-side transform (`reroute_company_in_project_name`) detects the company shape via two signals — a trailing UK Companies-House ID pattern, or a trailing legal-form suffix from the shared `LEGAL_FORM_SUFFIXES` list — and moves the value to the `affiliated_companies` cell on the same row, on an archive import. On a new upload the same cell stays as written and blocks (see "A project cell naming a company"). When `affiliated_companies` is blank, the moved value becomes the operator (prepended); when populated, it's appended as a partner. Tokens already present in `affiliated_companies` (NFKC + casefold match) are dropped silently. `project_name` becomes blank, and the cleaner then fills the cell with the file's anonymous placeholder, `"Anonymous project"`, so the row imports.
 
 **Rationale:** Without the transform, the company-shaped cell either survives as a fake project (polluting the projects dimension) or blocks import. Rerouting preserves the actual operator intent (the company belongs in the affiliations) and lets the existing anonymous-project pathway handle the now-empty project_name. The legal-form suffix list is shared with `core.entity_norm` so a single source of truth governs what counts as "company-shaped" across the parser and the dedup pipeline. An inline exemption set (currently the Mongolian feasibility-study description and "Joint Venture") catches the small set of false positives where a legitimate project description happens to end in a legal-form word.
 
-**Technical detail:** Transform at `packages/stores/eiti/src/eiti/parsing/transforms/company_in_project_name_reroute.py`, registered in `_V2_TRANSFORMS` in `packages/stores/eiti/src/eiti/parsing/submissions.py` (seeded after `drop_empty_identity_rows`; `_ordered_transforms` derives the execution order from the declared read/write hazards, which run it before the entity-recognition transforms). Detection patterns: `_CHID_PATTERN` matches `\(\d{6,10}[A-Z]?\)$` (literal parens required); `_SUFFIX_PATTERN` is built from `core.legal_form_suffixes.LEGAL_FORM_SUFFIXES` (the consumer sorts longest-first at build time so multi-token suffixes match before single words). Emits `Finding(code=EitiParserCode.COMPANY_NAME_IN_PROJECT_NAME_REROUTED, category=FindingCategory.SCHEMA_DEVIATION)` per row modified. The detection signal (`chid` / `suffix:<word>`), the disposition (prepended / appended / duplicate dropped), and the target field (`affiliated_companies`) are described in the finding's `message` prose — the reroute carries no structured payload, as no consumer reads those facts programmatically. Listed in `NON_VALIDATION_CODES` in `tests/unit/test_parser_code_disposition_coverage.py` so the operator sees an informational note but no actionable button. `tests/unit/test_fallback_fill_gives_way_to_anonymous_project.py` pins the disposition: the `fallback_fill` binding gives way to the `anonymous_entity_fill` binding, so on an archive upload a blank `project_name` on `Projects` / `Companies15` takes the anonymous-project placeholder and is never also NV-filled. The cleared `project_name` cell is `CELL_BLANK` (the field accepts "Not available"): on an archive upload the `anonymous_entity_fill` binding mints the anonymous project, and on a live upload the `fallback_fill` binding fills it "Not available".
+**Technical detail:** Transform at `packages/stores/eiti/src/eiti/parsing/transforms/company_in_project_name_reroute.py`, registered in `_V2_TRANSFORMS` in `packages/stores/eiti/src/eiti/parsing/submissions.py` (seeded after `drop_empty_identity_rows`; `_ordered_transforms` derives the execution order from the declared read/write hazards, which run it before the entity-recognition transforms). Detection patterns: `_CHID_PATTERN` matches `\(\d{6,10}[A-Z]?\)$` (literal parens required); `_SUFFIX_PATTERN` is built from `core.legal_form_suffixes.LEGAL_FORM_SUFFIXES` (the consumer sorts longest-first at build time so multi-token suffixes match before single words). Emits `Finding(code=EitiParserCode.COMPANY_NAME_IN_PROJECT_NAME_REROUTED, category=FindingCategory.SCHEMA_DEVIATION)` per row modified. The detection signal (`chid` / `suffix:<word>`), the disposition (prepended / appended / duplicate dropped), and the target field (`affiliated_companies`) are described in the finding's `message` prose — the reroute carries no structured payload, as no consumer reads those facts programmatically. Listed in `NON_VALIDATION_CODES` in `tests/unit/test_parser_code_disposition_coverage.py` so the operator sees an informational note but no actionable button. `tests/unit/test_fallback_fill_gives_way_to_anonymous_project.py` pins the disposition: the `fallback_fill` binding gives way to the `anonymous_entity_fill` binding, so on an archive upload a blank `project_name` on `Projects` / `Companies15` takes the anonymous-project placeholder and is never also NV-filled. The cleared `project_name` cell is `CELL_BLANK`, and the `anonymous_entity_fill` binding mints the anonymous project.
 
 ### What happens to a list-typed cell where every comma-separated token is unrecognised?
 <!-- scenario: trust-the-data; topic: data-quality-policy -->
@@ -2480,11 +2480,11 @@ What the user can answer in the dashboard is bounded by what the tool offered:
 
 **Situation:** 13 Angolan projects hold their licence in the company list and `-` in the licence cell, so `067/10/07/T.E/ANG-MIREMPET/2023` was registered as a company.
 
-**Decision:** The number moves to the licence cell, and the project loses a false operator and gains its licence. The ids it registered are retired.
+**Decision:** On an archive import, the number moves to the licence cell, and the project loses a false operator and gains its licence. The ids it registered are retired. On a new upload the cell stays as written and blocks until the uploader moves the number.
 
 **Rationale:** The report states a licence, and a licence belongs on the project. `185/03/50` then connects the two projects that hold it.
 
-**Technical detail:** `transforms/licence_in_company_list.py` emits `LICENCE_MOVED_FROM_COMPANY_LIST`.
+**Technical detail:** `transforms/licence_in_company_list.py` emits `LICENCE_MOVED_FROM_COMPANY_LIST` on an archive import and `LICENCE_IN_COMPANY_LIST` on a new upload.
 
 ---
 
@@ -2510,7 +2510,7 @@ What the user can answer in the dashboard is bounded by what the tool offered:
 
 **Rationale:** A label in a report's rows is real money with no single owner, so it needs a bucket, not an entity. A retirement cannot be taken back and can delete rows, so an answer leaves the id registered and taking it back restores it. A model never removes an entity: only a curator's record retires one. Review never blocks a landing, but an unasked name does.
 
-A project cell holding only the name of a company, a person or a trading business is the same question, asked with the registered companies of that name beside it: `Alphonso Clinton` and `ExxonMobil` name no project, and `Oyu Tolgoi`, which also names a company, does. A label applies to its own column type only, so a company-column label says nothing of a project of that name. A new entity whose whole name matches a label of its type reads as the label: its cell has a finding, and a person's verdict reverses it.
+A project cell holding only the name of a company, a person or a trading business is the same question, asked with the registered companies of that name beside it: `Alphonso Clinton` and `ExxonMobil` name no project, and `Oyu Tolgoi`, which also names a company, does. A label applies to its own column type only, so a company-column label says nothing of a project of that name. A new entity whose whole name matches a label of its type reads as the label: its cell has a finding, and a person's verdict reverses it. Such a project cell is no label: it reads as that company's or person's name (see "A project cell naming a company").
 
 **Technical detail:** `tools/dedup/_nameness_panel.py`, `eiti/families/found_rollup_labels.toml`, `nameness_verdicts.toml`, and the review page `calibration/nameness/`. See `docs/guides/dedup-pipeline.md`.
 
@@ -2521,11 +2521,35 @@ A project cell holding only the name of a company, a person or a trading busines
 
 **Situation:** A project list holding a company's name in its project cell has that cell moved to the list's companies. A payment row's project cell had no such rule, so `Perenco T&T Limited` on a payment line became a project of that name. 88 such projects held 1,455 payment rows.
 
-**Decision:** On an archive import, a payment's project cell a project list would read as a company is filled as not available. The payment keeps its money and its company, and names no project. A cell the project cell-type census judged a clean project stays.
+**Decision:** On an archive import, a payment's project cell a project list would read as a company is written as the licence where the report's project list gives that cell exactly one licence, so Barrick's 3 lines (US$110.13M) reach Lumwana Mine. Any other such cell is filled as not available: the payment keeps its money and its company, and names no project. A cell the project cell-type census holds a verdict on reads by it, unless the panel judged it a company's or a person's name; the census holds no verdict for a cell it judged clean, so a company-shaped one reads by its shape. On a new upload the line stops, and the uploader corrects the file.
 
 **Rationale:** The row already names its payer in its own column. A company is no project, and a project list built from its own payment lines would claim otherwise.
 
-**Technical detail:** `_apply_reference` in `transforms/project_celltype_census.py` reads `looks_like_company` from `transforms/company_in_project_name_reroute.py` and emits `NON_PROJECT_REFERENCE_NVED`.
+**Technical detail:** `_apply_reference` in `transforms/project_celltype_census.py` reads `reads_as_operator` from `transforms/company_in_project_name_reroute.py` and emits `NON_PROJECT_REFERENCE_NVED`; `transforms/payment_project_written_as_licence.py` emits `PAYMENT_PROJECT_WRITTEN_AS_LICENCE`.
+
+### A project cell naming a company is read by the row's licence, or as that company's undisclosed projects
+<!-- scenario: trust-the-data; topic: entity-resolution -->
+
+**Situation:** Some reports write a company or a person where a project's name belongs. Zambia's 2022 report has a row reading `Barrick`, copper, US$1,008.6M. That says who produced what, and names no project.
+
+**Decision:** On an archive import, where a project cell has been judged to hold only a company's or a person's name, in that country, or looks like a company's, the name moves to the row's company list. A row stating a licence then reads as that licence's project, so Barrick's row joins Lumwana Mine. A row with no licence reads as that company's undisclosed projects in that country, which keep their money and stay off the dashboard's project pages. The same name in another country is untouched, a mine named after its company stays a project, and a person's verdict reverses the reading: `Falconbridge Dominicana, S.A.` keeps its name.
+
+On a new upload the same cell stays as written and blocks until the uploader fixes the file, as does a cell the frozen project census read as a misfiled operator. The block names what to write. The uploader knows what the row names, so our assumption has no reason to run on their file.
+
+**Rationale:** A licence identifies one contract area. A company's name can cover one operation or many, so it cannot stand for a project. An archive file has no one left to ask, so we assume and accept some false positives. A new file has someone who knows.
+
+**Technical detail:** `eiti/families/sdf/found_operator_cells.toml` (`nameness_panel.py family-file`), `reads_as_operator` in `transforms/company_in_project_name_reroute.py`, which emits `COMPANY_NAME_IN_PROJECT_NAME_REROUTED` on an archive import. `transforms/operator_in_project_cell.py` emits `OPERATOR_IN_PROJECT_CELL` on a new upload.
+
+### A licence cell holding a company's registration number names no licence
+<!-- scenario: trust-the-data; topic: entity-resolution -->
+
+**Situation:** Trinidad and Tobago's project lists write each company's registration number in the licence column, such as `000115137-2` beside NGC E&P Investments (Netherlands) B.V. Read as licences, these numbers made 79 projects named only by a number.
+
+**Decision:** On an archive import, a number some company of the same report holds is cleared from the licence cell, with a note on the row. The row then reads as its company's undisclosed projects. Trinidad and Tobago's project keys fall from 80 to 1. No money moves: those rows state volumes and no values. A number no company of that report holds stays, unless a named correction clears it because another report's company holds it.
+
+**Rationale:** A company's own number identifies the company, not a contract area, and the report already names the company.
+
+**Technical detail:** `transforms/company_number_in_licence.py`, emitting `COMPANY_NUMBER_IN_LICENCE_CLEARED`, compared by the licence fold after `move_licence_from_company_list`.
 
 ---
 
