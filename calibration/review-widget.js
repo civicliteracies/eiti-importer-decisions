@@ -24,7 +24,9 @@
    (itself for one that is), kept a partition by construction: a member can be joined only to a member
    that is its own project, and the members joined to a member follow it when it is joined to another
    (joinMember). The draft is the caller's state, passed back in on every render as opts.draft and
-   updated through onDraft; the save button commits onChoose(partition.verdict, null, draft).
+   updated through onDraft; the save button commits onChoose(partition.verdict, null, draft). A partition
+   kind that names a `note` label shows a note box: what is typed reaches the caller through onNote, comes
+   back as opts.note on every render, and is saved with the next commit of the item, a partition or unsure.
 
    Untrusted text: names and item details are written with textContent, never innerHTML, so a name, a
    fact, a quote or a judge's answer cannot inject markup. A quote's link is rendered only for an https
@@ -37,8 +39,9 @@
 /**
  * @typedef {[string, string]} Choice - [value, label]; the value is what a verdict cell stores
  * @typedef {{ question: string, choices: Choice[] }} FollowUp
- * @typedef {{ verdict: string, own: string, joinedTo: string, save: string }} PartitionConfig - the verdict
- *   a partition answer commits, and the labels of "its own project", "same project as" and the save button
+ * @typedef {{ verdict: string, own: string, joinedTo: string, save: string, note?: string }} PartitionConfig - the
+ *   verdict a partition answer commits, the labels of "its own project", "same project as" and the save
+ *   button, and of the note box when the page offers one
  * @typedef {{ question: string, choices: Choice[], followUp?: Record<string, FollowUp>, partition?: undefined }} ChoiceKind
  * @typedef {{ question: string, partition: PartitionConfig, choices?: undefined, followUp?: undefined }} PartitionKind
  * @typedef {ChoiceKind | PartitionKind} KindConfig - a choice kind (choices) or a partition kind (partition)
@@ -53,14 +56,15 @@
  *   machine_detail?: (string|null) }} ReviewItem - a choice kind's item names its `names`; a partition
  *   kind's lists its `members` and the partition its review starts from (`prior`); validateReviewItem
  *   holds an item to its kind
- * @typedef {{ verdict: string, detail: (string|null), partition?: undefined }} ChoiceDecided
- * @typedef {{ verdict: string, detail: null, partition: Partition }} PartitionDecided
+ * @typedef {{ verdict: string, detail: (string|null), partition?: undefined, note?: string }} ChoiceDecided
+ * @typedef {{ verdict: string, detail: null, partition: Partition, note?: string }} PartitionDecided
  * @typedef {ChoiceDecided | PartitionDecided} Decided
  * @typedef {(verdict: string, detail: (string|null), partition?: Partition) => void} ChooseFn
  * @typedef {(verdict: (string|null)) => void} PendingFn
  * @typedef {(draft: Partition, memberId: string) => void} DraftFn
  * @typedef {{ reveal?: boolean, pending?: (string|null), draft?: (Partition|null), focusMember?: (string|null),
- *   onChoose?: ChooseFn, onPending?: PendingFn, onDraft?: DraftFn,
+ *   note?: (string|null), onChoose?: ChooseFn, onPending?: PendingFn, onDraft?: DraftFn,
+ *   onNote?: (note: string) => void,
  *   onPrev?: () => void, onNext?: () => void, position?: number, total?: number }} RenderOpts
  * @typedef {{ item: (ReviewItem|null), config: ReviewConfig, pending?: (string|null), onChoose?: ChooseFn,
  *   onPending?: PendingFn, onNext?: () => void, onPrev?: () => void }} KeyHandlers
@@ -142,6 +146,7 @@
       if (typeof partition[key] !== "string" || !partition[key]) return where + ": partition." + key + " must be a non-empty string";
     }
     if (partition.verdict === unsure) return where + ": partition.verdict is the unsure value";
+    if (partition.note !== undefined && (typeof partition.note !== "string" || !partition.note)) return where + ": partition.note must be a non-empty string";
     return null;
   }
 
@@ -540,8 +545,8 @@
    * Render a partition item: each member with its evidence and a selector, its own project or the same
    * project as a member that is one, then the save button. The draft (opts.draft, else the committed
    * answer's partition, else every member its own project) is the caller's state; a change reports the
-   * new draft through onDraft, and the save button commits it. A partition item has no machine answer,
-   * so it never reveals one.
+   * new draft through onDraft, and the save button commits it. The note (opts.note, else the committed
+   * answer's) is the caller's state too. A partition item has no machine answer, so it never reveals one.
    * @param {Document} doc @param {HTMLElement} container @param {ReviewItem} item @param {Decided|null} decided
    * @param {ReviewConfig} config @param {KindConfig} kc @param {RenderOpts} o
    */
@@ -610,20 +615,37 @@
     var save = doc.createElement("button");
     save.setAttribute("data-verdict", pc.verdict);
     save.textContent = pc.save;
-    var saved = !!decided && decided.verdict === pc.verdict && !!decided.partition && samePartition(decided.partition, draft);
+    var committedNote = (decided && decided.note) || "";
+    var note = o.note != null ? o.note : committedNote;
+    var saved = !!decided && decided.verdict === pc.verdict && !!decided.partition && samePartition(decided.partition, draft) && note === committedNote;
     if (saved) save.classList.add("primary");
     save.onclick = function () { if (o.onChoose) o.onChoose(pc.verdict, null, draft); };
     choiceRow.appendChild(save);
-    card.appendChild(choiceRow);
-    // An answer being changed is not saved until the save button commits it; say so beside it.
-    if (o.draft && !saved) {
-      var unsaved = doc.createElement("div");
-      unsaved.className = "unsaved";
-      unsaved.setAttribute("role", "status");
-      unsaved.textContent = "Not saved yet";
-      card.appendChild(unsaved);
+    if (pc.note) {
+      var noteLabel = doc.createElement("label");
+      noteLabel.className = "note";
+      noteLabel.textContent = pc.note;
+      var noteBox = doc.createElement("textarea");
+      noteBox.setAttribute("data-note", "");
+      noteBox.rows = 2;
+      noteBox.value = note;
+      noteBox.oninput = function () {
+        if (o.onNote) o.onNote(noteBox.value);
+        // Typing does not re-render, which would lose the caret; the notice appears in place.
+        if (!unsaved.parentNode) card.insertBefore(unsaved, unsureRow);
+      };
+      noteLabel.appendChild(noteBox);
+      card.appendChild(noteLabel);
     }
-    card.appendChild(renderUnsure(doc, decided, config, o));
+    card.appendChild(choiceRow);
+    var unsureRow = renderUnsure(doc, decided, config, o);
+    // An answer being changed is not saved until the save button commits it; say so beside it.
+    var unsaved = doc.createElement("div");
+    unsaved.className = "unsaved";
+    unsaved.setAttribute("role", "status");
+    unsaved.textContent = "Not saved yet";
+    if ((o.draft || note !== committedNote) && !saved) card.appendChild(unsaved);
+    card.appendChild(unsureRow);
     card.appendChild(renderNav(doc, o));
 
     container.appendChild(card);

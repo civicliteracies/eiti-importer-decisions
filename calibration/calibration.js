@@ -216,20 +216,25 @@
     };
   }
 
-  // The answer a widget commit stands for: a partition answer carries its partition and no detail.
-  /** @param {string} verdict @param {string|null} detail @param {Partition|undefined} partition @returns {Decided} */
-  function decidedOf(verdict, detail, partition) {
-    return partition ? { verdict: verdict, detail: null, partition: partition } : { verdict: verdict, detail: detail };
+  // The answer a widget commit stands for: a partition answer carries its partition and no detail,
+  // and any answer a note only when the reviewer wrote one.
+  /** @param {string} verdict @param {string|null} detail @param {Partition|undefined} partition @param {string} [note] @returns {Decided} */
+  function decidedOf(verdict, detail, partition, note) {
+    /** @type {Decided} */
+    var decided = partition ? { verdict: verdict, detail: null, partition: partition } : { verdict: verdict, detail: detail };
+    if (note) decided.note = note;
+    return decided;
   }
 
-  // The verdict cell a reviewer's answer is stored as: `detail` and `partition` only when the answer
-  // has one, so a one-step answer's cell is exactly { verdict, timestamp }.
+  // The verdict cell a reviewer's answer is stored as: `detail`, `partition` and `note` only when the
+  // answer has one, so a one-step answer's cell is exactly { verdict, timestamp }.
   /** @param {Decided} decided @param {number} timestamp @returns {VerdictCell} */
   function verdictCell(decided, timestamp) {
     /** @type {VerdictCell} */
     var cell = { verdict: decided.verdict, timestamp: timestamp };
     if (decided.detail != null) cell.detail = decided.detail;
     if (decided.partition != null) cell.partition = decided.partition;
+    if (decided.note != null) cell.note = decided.note;
     return cell;
   }
 
@@ -602,8 +607,8 @@
     var reviewer = IDENTITY === "typed" && LS ? (LS.getItem(REVIEWER_KEY) || "") : "";
     // `drafts` holds, per item, the partition a partition item's reviewer is building and has not
     // saved, kept across navigation for the page session and dropped when the item's answer commits.
-    /** @type {{screen:Screen, localVerdicts:Record<string,Decided>, unsaved:Record<string,boolean>, drafts:Record<string,Partition>}} */
-    var view = { screen: { kind: "loading" }, localVerdicts: {}, unsaved: {}, drafts: {} };
+    /** @type {{screen:Screen, localVerdicts:Record<string,Decided>, unsaved:Record<string,boolean>, drafts:Record<string,Partition>, notes:Record<string,string>}} */
+    var view = { screen: { kind: "loading" }, localVerdicts: {}, unsaved: {}, drafts: {}, notes: {} };
 
     // The published item `id`. Total once boot has indexed the items (indexItems), since a bucket names
     // only published items and nothing reads a bucket before boot.
@@ -1178,9 +1183,12 @@
     /** @param {LabelScreen} screen @param {ReviewItem} it the item shown @param {string} verdict @param {string|null} detail @param {Partition} [partition] */
     function chooseAndAdvance(screen, it, verdict, detail, partition) {
       if (choiceLocked) return; // mid-confirm beat — ignore extra presses (see CHOICE_ADVANCE_MS)
-      var decided = decidedOf(verdict, detail, partition);
+      var typed = view.notes[it.item_id];
+      var before = view.localVerdicts[it.item_id];
+      var decided = decidedOf(verdict, detail, partition, typed !== undefined ? typed : before && before.note);
       view.localVerdicts[it.item_id] = decided;
       delete view.drafts[it.item_id]; // the committed answer is the item's state now
+      delete view.notes[it.item_id];
       resetItemState(screen);
       delete view.unsaved[it.item_id];
       if (isActive()) { verdictWriter.queue(screen.bucket.bucket_id, reviewer, it.item_id, decided); markSaving(); } // gated: only the active session auto-saves
@@ -1255,10 +1263,11 @@
       // scored items are BLIND — reveal:false, no machine answer shown, ever.
       W.renderReviewItem(document, main, it, (view.localVerdicts[it.item_id] || null), CONFIG, {
         reveal: false, pending: screen.pending, draft: view.drafts[it.item_id] || null, focusMember: screen.draftMember,
-        position: screen.idx + 1, total: items.length,
+        note: view.notes[it.item_id], position: screen.idx + 1, total: items.length,
         onChoose: function (verdict, detail, partition) { chooseAndAdvance(screen, it, verdict, detail, partition); },
         onPending: function (verdict) { choosePending(screen, verdict); },
         onDraft: function (draft, memberId) { changeDraft(screen, it, draft, memberId); },
+        onNote: function (note) { view.notes[it.item_id] = note; },
         onNext: function () { goNext(screen); },
         onPrev: function () { goPrev(screen); },
       });

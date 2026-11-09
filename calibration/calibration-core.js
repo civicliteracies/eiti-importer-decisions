@@ -13,9 +13,10 @@
    refuses them, bucketStatus reports "excluded", nextOpenBucket skips it). A second-round bucket
    excludes the reviewers whose own labels it re-reviews.
 
-   A verdict cell is { verdict, detail?, partition?, timestamp }: `detail` carries the follow-up answer
-   of a two-step choice and is absent for a one-step one; `partition` carries a partition kind's
-   answer, each member's id to the id of the member that is its project.
+   A verdict cell is { verdict, detail?, partition?, note?, timestamp }: `detail` carries the follow-up
+   answer of a two-step choice and is absent for a one-step one; `partition` carries a partition kind's
+   answer, each member's id to the id of the member that is its project; `note` is what the reviewer
+   wrote beside the answer.
 
    The `sessions` map is the cross-browser single-active-session marker: a capacity-1 claim-lease keyed
    by sessionId with a short staleness horizon (SESSION_TTL_MS). It is refreshed lazily and NEVER
@@ -35,7 +36,7 @@
  * @typedef {{ claimants: Claimant[], completed_by: string[] }} BucketState
  * @typedef {{ sessionId: string, ts: number }} SessionRec
  * @typedef {{ roster: string[], buckets: Record<string, BucketState>, sessions?: Record<string, SessionRec> }} CoordState
- * @typedef {{ verdict: string, detail?: string, partition?: Record<string, string>, timestamp: number }} VerdictCell
+ * @typedef {{ verdict: string, detail?: string, partition?: Record<string, string>, note?: string, timestamp: number }} VerdictCell
  * @typedef {{ ok: boolean, reason?: string, state: CoordState }} CoordResult
  * @typedef {{ bucket_id: string, stratum: string, item_ids: string[], confirmations_required: number,
  *   excluded_reviewers?: string[] }} Bucket
@@ -368,7 +369,7 @@
   /**
    * Merge one reviewer's verdict cells into an accumulator, latest timestamp winning per item (a
    * same-reviewer multi-device union — a re-pull can't double-count). The winning cell keeps its
-   * string `detail` and its `partition`; a cell without one stays without one. A cell whose
+   * string `detail`, its `partition` and its string `note`; a cell without one stays without one. A cell whose
    * `partition` is no partition is dropped whole, so a partition answer always carries one.
    * @param {Record<string, VerdictCell>} acc
    * @param {Record<string, unknown>} decisions - a verdict file's cells as read; a cell that is not an
@@ -390,6 +391,7 @@
       var next = { verdict: cell.verdict, timestamp: ts };
       if (typeof cell.detail === "string") next.detail = cell.detail;
       if (isPartition(cell.partition)) next.partition = Object.assign({}, cell.partition);
+      if (typeof cell.note === "string") next.note = cell.note;
       acc[itemId] = next;
     });
     return acc;

@@ -1,0 +1,171 @@
+[
+  {
+    "bucket_id": "entity-group-2-94f79d5a135f",
+    "stratum": "entity-group-2",
+    "item_ids": [
+      "entity|AFG|89835353a2773596",
+      "entity|AFG|92b785bb1daf1ac7",
+      "entity|ANY|c1daa9294ac81fc7",
+      "entity|ARM|ba17a5e91c98b1e0",
+      "entity|AZE|e53f0af3fa1e7f9c",
+      "entity|COG|ee5977e113e7900a",
+      "entity|ETH|4c528a4c221449e5",
+      "entity|GBR|9aa42aef4b16badd",
+      "entity|GHA|240242afd0ccc5c0",
+      "entity|GUY|57f0ac151396fda0"
+    ],
+    "confirmations_required": 1
+  },
+  {
+    "bucket_id": "entity-group-2-ea8186c99144",
+    "stratum": "entity-group-2",
+    "item_ids": [
+      "entity|IRQ|9d8288d41c74b6b2",
+      "entity|LBR|0d63829043acaeff",
+      "entity|MDG|76fa58b89e0eebfe",
+      "entity|MLI|69b8720e59f59416",
+      "entity|MMR|b5aa4aa7a8663aa0",
+      "entity|MNG|00f962f47ab71578",
+      "entity|MRT|24ba56fb1a3f4d76",
+      "entity|MRT|302e343ac0fe8f62",
+      "entity|NGA|203b63f20804ca34",
+      "entity|NGA|55ebfa3dda530c40"
+    ],
+    "confirmations_required": 1
+  },
+  {
+    "bucket_id": "entity-group-2-13a0ae26c9f0",
+    "stratum": "entity-group-2",
+    "item_ids": [
+      "entity|NGA|a8fb4be30ced034c",
+      "entity|NGA|bc655a7775840935",
+      "entity|NOR|2fc882499fa0909a",
+      "entity|NOR|fe471b5c58cba159",
+      "entity|PHL|162a67e024057968",
+      "entity|PHL|45ecdb2d10280d20",
+      "entity|PHL|684f9993b4566acf",
+      "entity|PHL|6f1376df511d3462",
+      "entity|PHL|a6ef5aee4a52699b",
+      "entity|SEN|7aeacdcbb5339cb6"
+    ],
+    "confirmations_required": 1
+  },
+  {
+    "bucket_id": "entity-group-2-88f25419a23b",
+    "stratum": "entity-group-2",
+    "item_ids": [
+      "entity|TGO|7d5cc01237216454",
+      "entity|TGO|8c33fa5ae209be2f",
+      "entity|TTO|4f7773e5a10e8193",
+      "entity|TZA|5b7015e280eb80c4",
+      "entity|UKR|12d0f5d61d8b90da",
+      "entity|UKR|29ae50d2bd82c9de",
+      "entity|UKR|534b53e957680d44",
+      "entity|UKR|53d4c63edafa5603",
+      "entity|UKR|56b46bdc4ba29284",
+      "entity|UKR|6a8b52f4833f963f"
+    ],
+    "confirmations_required": 1
+  },
+  {
+    "bucket_id": "entity-group-2-dd4969165651",
+    "stratum": "entity-group-2",
+    "item_ids": [
+      "entity|UKR|bfd21e4909c3fb20",
+      "entity|UKR|fdc415757b827f07",
+      "entity|USA|7c24faa463f95100",
+      "entity|ZMB|0324ba34d40be0da",
+      "entity|ZMB|ae2a6b307a964d1b",
+      "entity|ZMB|d4228bd493d3969c",
+      "entity|ZMB|f2a129db31f1d46b"
+    ],
+    "confirmations_required": 1
+  },
+  {
+    "bucket_id": "entity-group-3-1c3644459dfa",
+    "stratum": "entity-group-3",
+    "item_ids": [
+      "entity|GBR|01a427b8a66feb74",
+      "entity|GBR|1b29942b5918037d"
+    ],
+    "confirmations_required": 1
+  },
+  {
+    "bucket_id": "entity-group-3-a2028464630a",
+    "stratum": "entity-group-3",
+    "item_ids": [
+      "entity|GBR|2858dd1204739fb7",
+      "entity|GBR|568ebeec0d4bf5de",
+      "entity|GBR|b77be726cc0c87ed",
+      "entity|GBR|cbb7c8a080075107",
+      "entity|GBR|ecfd5c1015d8d256",
+      "entity|MLI|2c8b810d70129f79"
+    ],
+    "confirmations_required": 1
+  },
+  {
+    "bucket_id": "entity-group-3-3e326322ce77",
+    "stratum": "entity-group-3",
+    "item_ids": [
+      "entity|NGA|78df1484fa2f7485",
+      "entity|NGA|bb38d871134976e4"
+    ],
+    "confirmations_required": 1
+  },
+  {
+    "bucket_id": "entity-group-3-d65c8767524e",
+    "stratum": "entity-group-3",
+    "item_ids": [
+      "entity|TCD|2a06668e42f88570"
+    ],
+    "confirmations_required": 1
+  },
+  {
+    "bucket_id": "entity-group-3-834f2103f56d",
+    "stratum": "entity-group-3",
+    "item_ids": [
+      "entity|CIV|2f475a17c54cc24e",
+      "entity|COG|26cbc5eea3021414",
+      "entity|GBR|06833f0ff1f4bef5",
+      "entity|GBR|1247d464e7c945c8",
+      "entity|GBR|780816f0f81ee5d2",
+      "entity|IRQ|d16e5c4b6fdf938b",
+      "entity|MDG|587ef4981d615059",
+      "entity|MLI|c3a1e9a87aa7dc1d",
+      "entity|MMR|5a2716d146f8285e",
+      "entity|MNG|d5e8950e57d18e89"
+    ],
+    "confirmations_required": 1
+  },
+  {
+    "bucket_id": "entity-group-3-694a31e8a5af",
+    "stratum": "entity-group-3",
+    "item_ids": [
+      "entity|MRT|bc8a847ee5ef403b",
+      "entity|NGA|37e17ce8c5fe3540",
+      "entity|NLD|197c6decbe57a436",
+      "entity|SEN|35f8a2fdbef7dddf",
+      "entity|SEN|64cf7b55c83ab758",
+      "entity|TCD|3e462221450f97f2",
+      "entity|TLS|cd4cd10c551aeec7",
+      "entity|ZMB|0908cfde4e3bf6c4"
+    ],
+    "confirmations_required": 1
+  },
+  {
+    "bucket_id": "entity-group-4-bd7a4ca28b69",
+    "stratum": "entity-group-4",
+    "item_ids": [
+      "entity|ANY|fdd1ed01afd1e235",
+      "entity|COD|d511c22edb938b19",
+      "entity|LBR|bbf98cde7bfdda61",
+      "entity|MRT|46b12ce05d2d4750",
+      "entity|NOR|cba337930b1a92e6",
+      "entity|TCD|0ebb74dd7959f605",
+      "entity|TLS|3dd7ecb4800c54a7",
+      "entity|TLS|5a6a606ba47003d8",
+      "entity|TLS|6904fa6533109760"
+    ],
+    "confirmations_required": 1
+  }
+]

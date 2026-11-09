@@ -1,0 +1,60 @@
+{
+  "owner": "civicliteracies",
+  "repo": "eiti-calibration",
+  "statePath": "entity-panel/state.json",
+  "verdictDir": "entity-panel/verdicts",
+  "dataUrls": {
+    "scaffolds": "scaffolds.json",
+    "buckets": "buckets.json",
+    "manifest": "manifest.json"
+  },
+  "storagePrefix": "calib:entity-panel:",
+  "lockPrefix": "calib:entity-panel:writer:",
+  "identity": "typed",
+  "config": {
+    "kinds": {
+      "entity-group-1": {
+        "question": "Which of these entries are one entity? Decide from what the reports and registers show of each.",
+        "partition": {
+          "verdict": "partition",
+          "own": "Its own entity",
+          "joinedTo": "Same entity as",
+          "save": "Save this answer",
+          "note": "Note (optional): what decided it, or what would"
+        }
+      },
+      "entity-group-2": {
+        "question": "Which of these entries are one entity? Decide from what the reports and registers show of each.",
+        "partition": {
+          "verdict": "partition",
+          "own": "Its own entity",
+          "joinedTo": "Same entity as",
+          "save": "Save this answer",
+          "note": "Note (optional): what decided it, or what would"
+        }
+      },
+      "entity-group-3": {
+        "question": "Which of these entries are one entity? Decide from what the reports and registers show of each.",
+        "partition": {
+          "verdict": "partition",
+          "own": "Its own entity",
+          "joinedTo": "Same entity as",
+          "save": "Save this answer",
+          "note": "Note (optional): what decided it, or what would"
+        }
+      },
+      "entity-group-4": {
+        "question": "Which of these entries are one entity? Decide from what the reports and registers show of each.",
+        "partition": {
+          "verdict": "partition",
+          "own": "Its own entity",
+          "joinedTo": "Same entity as",
+          "save": "Save this answer",
+          "note": "Note (optional): what decided it, or what would"
+        }
+      }
+    },
+    "unsure": "unsure"
+  },
+  "practice": []
+}
