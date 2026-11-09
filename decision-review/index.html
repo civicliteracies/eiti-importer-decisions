@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; script-src &#x27;self&#x27;; style-src &#x27;self&#x27;; font-src &#x27;self&#x27;; img-src &#x27;self&#x27;; connect-src &#x27;self&#x27; https://api.github.com; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;;">
+  <meta name="calibration-config" content="config.json">
+  <title>EITI dashboard: decision review</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../calibration/calibration.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <p class="eyebrow">EITI dashboard</p>
+      <h1>Decision review</h1>
+      <p class="lede">Decide each question from the evidence shown. The judges' answers stay
+        hidden.</p>
+    </div>
+  </header>
+  <main id="content" class="wrap">
+    <div id="banner" class="banner" role="status"></div>
+    <div id="save-indicator" class="save-indicator" aria-hidden="true"></div>
+    <div id="app"></div>
+  </main>
+  <script src="../calibration/review-widget.js"></script>
+  <script src="../calibration/calibration-core.js"></script>
+  <script src="../calibration/calibration.js"></script>
+  <script src="../calibration/calibration-boot.js"></script>
+</body>
+</html>
