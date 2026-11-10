@@ -15,7 +15,7 @@
   "config": {
     "kinds": {
       "project_site": {
-        "question": "Is the EITI project this site: the same site, one a part of what the other covers, two parts of one site, or a site processing its output?",
+        "question": "Is the EITI project this site?",
         "choices": [
           [
             "same_site",
@@ -44,7 +44,7 @@
         ]
       },
       "site_membership": {
-        "question": "Do these two records describe one site: the same site, one a part of what the other describes, or two parts of one site?",
+        "question": "Do these two records describe one site?",
         "choices": [
           [
             "same_site",
