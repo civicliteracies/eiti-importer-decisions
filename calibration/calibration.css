@@ -69,10 +69,15 @@ select, .name-input {
 .names { display: flex; flex-direction: column; gap: 0.6rem; margin: 0.5rem 0 1.4rem; }
 .name { background: var(--bg-soft); border: 1px solid var(--rule-soft); border-radius: 10px;
   padding: 0.85rem 1rem; font-size: 1.1rem; font-weight: 500; word-break: break-word; }
-/* An item's facts, quotes and judges, under its names. */
-.details { margin: -0.6rem 0 1.4rem; font-size: 0.9rem; color: var(--fg-muted); }
-.details .facts, .details .judges { margin: 0.4rem 0; padding-left: 1.2rem; }
-.details .quote { margin: 0.5rem 0; padding: 0.5rem 0.85rem; border-left: 3px solid var(--rule); background: var(--bg-soft); border-radius: 0 8px 8px 0; }
+/* An item's facts, quotes and judges, under its names: a reading measure of about 72 characters, a
+   little air between items, and a long identifier broken rather than pushed past the card's edge. */
+.details { margin: -0.6rem 0 1.4rem; font-size: 0.9rem; line-height: 1.5; color: var(--fg-muted); }
+/* A partition item has no names: its details follow the question directly. */
+.q + .details { margin-top: 0.4rem; }
+.details .facts, .details .judges { margin: 0.4rem 0; padding-left: 1.2rem; max-width: 72ch; }
+.details .facts li + li, .details .judges li + li, .member .facts li + li { margin-top: 0.35rem; }
+.details li, .details .quote p, .member .facts li { overflow-wrap: anywhere; }
+.details .quote { margin: 0.5rem 0; padding: 0.5rem 0.85rem; border-left: 3px solid var(--rule); background: var(--bg-soft); border-radius: 0 8px 8px 0; max-width: 72ch; }
 .details .quote p { margin: 0 0 0.25rem; }
 .details .judge-name { font-weight: 600; }
 /* The first answer of a two-step choice, shown above its follow-up question. */
@@ -98,6 +103,22 @@ button.step-back { width: 100%; }
 /* Same padding/font as the choice buttons so all three stack at one height; the muted colour keeps
    Unsure visually secondary without making it a different size. */
 .unsure-row { margin-top: 0.6rem; } button.unsure { width: 100%; color: var(--fg-muted); font-size: 1rem; padding: 1rem; }
+/* A step whose labels are too long for equal columns (review-widget's choiceLayout) is a list: one
+   full-width option per choice, its key in a column of its own and its label wrapping at a reading
+   measure beside it. Unsure is the list's last option, a little apart and muted. */
+.answers.layout-list .choices { flex-direction: column; gap: 0.5rem; }
+.answers.layout-list .choices button, .answers.layout-list button.unsure {
+  flex: none; display: flex; align-items: baseline; gap: 0.75rem; width: 100%; margin: 0;
+  padding: 0.75rem 1rem; text-align: left; line-height: 1.4; }
+.answers.layout-list .unsure-row { margin-top: 0.85rem; }
+.answers.layout-list .key { flex: none; min-width: 1.9em; color: var(--fg-subtle); font-variant-numeric: tabular-nums; }
+.answers.layout-list .label { max-width: 68ch; }
+.answers.layout-list .primary .key { color: inherit; }
+/* On a narrow screen equal columns would wrap even short labels: a row stacks too. */
+@media (max-width: 36rem) {
+  .answers.layout-row .choices { flex-direction: column; gap: 0.5rem; }
+  .answers.layout-row .choices button { flex: none; margin: 0; }
+}
 .reveal { margin-top: 1.4rem; padding: 0.9rem 1rem; border-radius: 10px; display: none; }
 .reveal.show { display: block; }
 .reveal .verdict { font-weight: 700; }
@@ -173,7 +194,7 @@ button.step-back { width: 100%; }
 /* A partition item: one row per member, its evidence under its name, its selector beneath. */
 .members { list-style: none; padding: 0; margin: 0.5rem 0 1rem; }
 .member { padding: 0.6rem 0; border-top: 1px solid var(--rule); }
-.member .facts { margin: 0.25rem 0 0.4rem 1.1rem; font-size: 0.88rem; color: var(--fg-muted); }
+.member .facts { margin: 0.25rem 0 0.4rem 1.1rem; font-size: 0.88rem; line-height: 1.5; color: var(--fg-muted); max-width: 72ch; }
 .member select { max-width: 100%; }
 .note { display: block; margin-top: 0.4rem; font-size: 0.88rem; color: var(--fg-muted); }
 .note textarea { display: block; width: 100%; box-sizing: border-box; font: inherit; }

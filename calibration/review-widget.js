@@ -28,6 +28,11 @@
    kind that names a `note` label shows a note box: what is typed reaches the caller through onNote, comes
    back as opts.note on every render, and is saved with the next commit of the item, a partition or unsure.
 
+   Layout: a step lays out its choices from their labels (choiceLayout), so no page configures it.
+   Short labels sit side by side in equal columns; when one is too long for its column, every choice
+   is a full-width row of the list, its key beside its label. The unsure choice closes the same group
+   in either layout. Keys and focus are the same in both.
+
    Untrusted text: names and item details are written with textContent, never innerHTML, so a name, a
    fact, a quote or a judge's answer cannot inject markup. A quote's link is rendered only for an https
    URL, with rel="noopener noreferrer".
@@ -78,6 +83,12 @@
   // from the keyboard.
   var MAX_CHOICES = 9;
 
+  // A step's choices sit side by side when, laid out in equal columns, each column holds its "[N] "
+  // key and the step's longest label on one line: the step's choice count times (the longest label +
+  // KEY_CHARS) characters fits ROW_CHARS, about what one line of the card holds at its widest.
+  var ROW_CHARS = 80;
+  var KEY_CHARS = 4;
+
   /** @param {unknown} obj @param {string} key @returns {boolean} */
   function own(obj, key) { return obj != null && Object.prototype.hasOwnProperty.call(obj, key); }
 
@@ -116,6 +127,34 @@
     var found = null;
     choices.forEach(function (c) { if (c[0] === value) found = c[1]; });
     return found;
+  }
+
+  /**
+   * How a step lays out its choices: "row" when every label fits one line of an equal column, else
+   * "list", one full-width row per choice.
+   * @param {Choice[]} choices @returns {"row"|"list"}
+   */
+  function choiceLayout(choices) {
+    var longest = 0;
+    choices.forEach(function (c) { longest = Math.max(longest, c[1].length); });
+    return choices.length * (longest + KEY_CHARS) <= ROW_CHARS ? "row" : "list";
+  }
+
+  /**
+   * Fill a choice button with its key and its label, as two spans the list layout aligns: the text
+   * reads "[key] label".
+   * @param {Document} doc @param {HTMLElement} button @param {string} key @param {string} label
+   */
+  function keyedLabel(doc, button, key, label) {
+    var k = doc.createElement("span");
+    k.className = "key";
+    k.textContent = "[" + key + "]";
+    var l = doc.createElement("span");
+    l.className = "label";
+    l.textContent = label;
+    button.appendChild(k);
+    button.appendChild(doc.createTextNode(" "));
+    button.appendChild(l);
   }
 
   /** @param {string} where @param {unknown} choices @param {string} unsure @returns {string|null} */
@@ -405,6 +444,9 @@
       card.appendChild(step);
     }
 
+    // The choices and the unsure choice form one group, laid out from the step's labels.
+    var answers = doc.createElement("div");
+    answers.className = "answers layout-" + choiceLayout(choices);
     var choiceRow = doc.createElement("div");
     choiceRow.className = "choices";
     choices.forEach(function (pair, i) {
@@ -429,11 +471,11 @@
           ? function () { if (onPending) onPending(val); }
           : function () { if (onChoose) onChoose(val, null); };
       }
-      b.textContent = "[" + (i + 1) + "] " + label + (shownDetail ? " · " + shownDetail : "");
+      keyedLabel(doc, b, String(i + 1), label + (shownDetail ? " · " + shownDetail : ""));
       if (selected) b.classList.add("primary");
       choiceRow.appendChild(b);
     });
-    card.appendChild(choiceRow);
+    answers.appendChild(choiceRow);
 
     var unsureRow = renderUnsure(doc, decided, config, o);
     if (pending) {
@@ -443,7 +485,8 @@
       back.onclick = function () { if (onPending) onPending(null); };
       unsureRow.appendChild(back);
     }
-    card.appendChild(unsureRow);
+    answers.appendChild(unsureRow);
+    card.appendChild(answers);
 
     // Reveal: only when committed AND the shell allows it AND there is a machine answer. This is the
     // blindness gate — an unrevealed item never renders machine_verdict anywhere in the DOM.
@@ -517,7 +560,7 @@
     var unsureBtn = doc.createElement("button");
     unsureBtn.className = "unsure";
     unsureBtn.setAttribute("data-verdict", config.unsure);
-    unsureBtn.textContent = "[u] Unsure / can’t determine";
+    keyedLabel(doc, unsureBtn, "u", "Unsure / can’t determine");
     if (decided && decided.verdict === config.unsure) unsureBtn.classList.add("primary");
     unsureBtn.onclick = function () { if (o.onChoose) o.onChoose(config.unsure, null); };
     unsureRow.appendChild(unsureBtn);
@@ -709,6 +752,7 @@
 
   var api = {
     MAX_CHOICES: MAX_CHOICES,
+    choiceLayout: choiceLayout,
     validateReviewConfig: validateReviewConfig,
     validateReviewItem: validateReviewItem,
     partitionOf: partitionOf,
