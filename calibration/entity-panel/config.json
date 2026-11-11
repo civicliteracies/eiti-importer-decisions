@@ -15,6 +15,7 @@
     "kinds": {
       "entity-group-1": {
         "question": "Which of these entries are one entity? Decide from what the reports and registers show of each.",
+        "layout": "partition",
         "partition": {
           "verdict": "partition",
           "own": "Its own entity",
@@ -25,6 +26,7 @@
       },
       "entity-group-2": {
         "question": "Which of these entries are one entity? Decide from what the reports and registers show of each.",
+        "layout": "partition",
         "partition": {
           "verdict": "partition",
           "own": "Its own entity",
@@ -35,6 +37,7 @@
       },
       "entity-group-3": {
         "question": "Which of these entries are one entity? Decide from what the reports and registers show of each.",
+        "layout": "partition",
         "partition": {
           "verdict": "partition",
           "own": "Its own entity",
@@ -45,6 +48,7 @@
       },
       "entity-group-4": {
         "question": "Which of these entries are one entity? Decide from what the reports and registers show of each.",
+        "layout": "partition",
         "partition": {
           "verdict": "partition",
           "own": "Its own entity",

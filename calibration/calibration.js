@@ -1,11 +1,24 @@
 /* Distributed review page shell.
 
-   Wires the shared blind-review widget (review-widget.js) and the pure claim-lease core
+   Wires the shared review widget (review-widget.js) and the pure claim-lease core
    (calibration-core.js) to the GitHub Contents API. Reviewers open a link carrying a fine-grained
    token in the URL fragment, take a reviewer identity, claim buckets (unavailable to others once
-   their confirmations are held), label BLIND (scored items never reveal the machine answer — only
-   the warm-up practice set does), and their verdicts auto-save to the private coordination repo.
-   Resume from any device.
+   their confirmations are held), label (a scored names item never reveals the machine answer — only
+   the warm-up practice set does; a comparison item shows the proposal it carries), and their verdicts
+   auto-save to the private coordination repo. Resume from any device.
+
+   Flags and notes on a comparison kind: what the reviewer sets before answering rides on the answer's
+   commit; on an item already answered, a flag toggled or a note typed saves the answered cell again in
+   place (saveInPlace), with no advance.
+
+   Saved answers of a comparison bucket: opening one shows its first card at once and reads the
+   reviewer's verdict file behind it (loadAnswers), from the writer's own snapshot of the file when this
+   session has written it (the Contents API is not read-after-write consistent), else by a GET. Until
+   the answers are known the card offers no Accept and Enter is next, so no key saves over an answer
+   the reviewer gave earlier; a read that fails after the retries says so on the card, with a retry.
+   The file fills only items with no answer in memory and nothing pending (cellsToLoad), and a loaded
+   cell keeps its timestamp, which an export writes while the answer is unchanged. Names and partition
+   buckets load nothing: their Enter is next whatever the answer.
 
    A factory, not a page: `CalibrationApp.create(options)` builds one page instance and nothing runs
    until its `boot()` is called. Each page loads the shared scripts and names its JSON config in a
@@ -90,12 +103,14 @@
  * @typedef {"AUTH"|"CAS"|"RETRYABLE"|"OTHER"} ErrKind - calibration-core.classifyError's classes
  * @typedef {Error & { kind: ErrKind, status: number }} GhError - a classified GitHub call failure
  * @typedef {{ ok: boolean, declined?: boolean, state: CoordState }} StateResult - a withState outcome
+ * @typedef {import("./review-widget.js").SavedState} SavedState
  * @typedef {{ kind: "label", bucket: Bucket, idx: number, notice: (string|null), noticeAnnounced: boolean,
- *   pending: (string|null), draftMember: (string|null) }} LabelScreen - one labeling session of a bucket,
- *   opened by openBucket: the item shown (idx); a calm notice for the session (a full-bucket claim race),
- *   announced once; the first-step answer awaiting its follow-up on the current item (the widget's
- *   two-step choice), cleared whenever the item changes or an answer commits; and the member whose
- *   selector changed the current item's draft last, so its selector keeps focus
+ *   pending: (string|null), draftMember: (string|null), saved: SavedState }} LabelScreen - one labeling
+ *   session of a bucket, opened by openBucket: the item shown (idx); a calm notice for the session (a
+ *   full-bucket claim race), announced once; the first-step answer awaiting its follow-up on the current
+ *   item (the widget's two-step choice), cleared whenever the item changes or an answer commits; the
+ *   member whose selector changed the current item's draft last, so its selector keeps focus; and
+ *   whether the reviewer's saved answers to the bucket are known (always, for a bucket that loads none)
  * @typedef {{ kind: "loading" } | { kind: "roster" } | { kind: "practice" } | { kind: "board" } | LabelScreen
  *   | { kind: "completing", bucket: Bucket }} Screen - what the page shows; "completing" is a finished
  *   bucket whose verdicts are flushing before it is marked complete
@@ -213,21 +228,36 @@
       },
       // Cancel the debounce and flush now; await the returned promise before treating a bucket as done.
       flushNow: function () { if (timer != null) { clearTimeout(timer); timer = null; } return flush(); },
+      // The file as this writer last saved it ({sha, decisions}), or null when it has not saved it, or
+      // its sha has been uncertain since a failed save.
+      /** @param {string} bucketId @param {string} reviewer @returns {VerdictSnapshot|null} */
+      snapshot: function (bucketId, reviewer) {
+        var k = keyFor(bucketId, reviewer);
+        return Object.prototype.hasOwnProperty.call(snap, k) ? snap[k] || null : null;
+      },
+      // Whether an answer to `itemId` is queued and not yet saved.
+      /** @param {string} bucketId @param {string} reviewer @param {string} itemId @returns {boolean} */
+      isQueued: function (bucketId, reviewer, itemId) {
+        var slot = pending[keyFor(bucketId, reviewer)];
+        return !!slot && Object.prototype.hasOwnProperty.call(slot.decisions, itemId);
+      },
     };
   }
 
   // The answer a widget commit stands for: a partition answer carries its partition and no detail,
-  // and any answer a note only when the reviewer wrote one.
-  /** @param {string} verdict @param {string|null} detail @param {Partition|undefined} partition @param {string} [note] @returns {Decided} */
-  function decidedOf(verdict, detail, partition, note) {
+  // any answer a note only when the reviewer wrote one, and a choice answer its flags only when the
+  // reviewer set some.
+  /** @param {string} verdict @param {string|null} detail @param {Partition|undefined} partition @param {string} [note] @param {string[]} [flags] @returns {Decided} */
+  function decidedOf(verdict, detail, partition, note, flags) {
     /** @type {Decided} */
     var decided = partition ? { verdict: verdict, detail: null, partition: partition } : { verdict: verdict, detail: detail };
     if (note) decided.note = note;
+    if (!partition && flags && flags.length) decided.flags = flags.slice();
     return decided;
   }
 
-  // The verdict cell a reviewer's answer is stored as: `detail`, `partition` and `note` only when the
-  // answer has one, so a one-step answer's cell is exactly { verdict, timestamp }.
+  // The verdict cell a reviewer's answer is stored as: `detail`, `partition`, `note` and `flags` only
+  // when the answer has one, so a one-step answer's cell is exactly { verdict, timestamp }.
   /** @param {Decided} decided @param {number} timestamp @returns {VerdictCell} */
   function verdictCell(decided, timestamp) {
     /** @type {VerdictCell} */
@@ -235,6 +265,7 @@
     if (decided.detail != null) cell.detail = decided.detail;
     if (decided.partition != null) cell.partition = decided.partition;
     if (decided.note != null) cell.note = decided.note;
+    if (decided.flags != null) cell.flags = decided.flags.slice();
     return cell;
   }
 
@@ -607,8 +638,11 @@
     var reviewer = IDENTITY === "typed" && LS ? (LS.getItem(REVIEWER_KEY) || "") : "";
     // `drafts` holds, per item, the partition a partition item's reviewer is building and has not
     // saved, kept across navigation for the page session and dropped when the item's answer commits.
-    /** @type {{screen:Screen, localVerdicts:Record<string,Decided>, unsaved:Record<string,boolean>, drafts:Record<string,Partition>, notes:Record<string,string>}} */
-    var view = { screen: { kind: "loading" }, localVerdicts: {}, unsaved: {}, drafts: {}, notes: {} };
+    // `notes` and `flags` hold what the reviewer typed or set on an item not yet answered, until its
+    // answer commits them. `loaded` holds each answer read from the reviewer's verdict file with the
+    // cell's timestamp, so an export of an answer still unchanged keeps the time it was given.
+    /** @type {{screen:Screen, localVerdicts:Record<string,Decided>, unsaved:Record<string,boolean>, drafts:Record<string,Partition>, notes:Record<string,string>, flags:Record<string,string[]>, loaded:Record<string,{decided:Decided, timestamp:number}>}} */
+    var view = { screen: { kind: "loading" }, localVerdicts: {}, unsaved: {}, drafts: {}, notes: {}, flags: {}, loaded: {} };
 
     // The published item `id`. Total once boot has indexed the items (indexItems), since a bucket names
     // only published items and nothing reads a bucket before boot.
@@ -1096,9 +1130,12 @@
       // (C.complete) — not the claim — is what keeps surplus confirmations out of the analysis, so a slow
       // or failed claim never costs the reviewer their place.
       var gen = ++openGeneration; // the "← Back to buckets" button is live during the claim, so a second open can race this one
+      var loads = isComparison(b.stratum);
       /** @type {LabelScreen} */
-      var screen = { kind: "label", bucket: b, idx: 0, notice: null, noticeAnnounced: false, pending: null, draftMember: null };
+      var screen = { kind: "label", bucket: b, idx: 0, notice: null, noticeAnnounced: false, pending: null, draftMember: null,
+        saved: loads ? "loading" : "known" };
       renderLabel(screen);
+      if (loads) loadAnswers(screen);
       beginClaiming();
       withState(function (s) {
         return claimWithPresence(s, b, reviewer, SESSION_ID, Date.now()); // null → declined (full bucket, or a live foreign session holds the name)
@@ -1140,17 +1177,23 @@
     // Paint the chosen button into its selected state in place + a one-shot press animation, so the
     // confirmation lands on the button the reviewer just hit (click or keyboard) — the SAME navy selected
     // state they see when navigating back, so there's no separate visual vocabulary to learn. A
-    // follow-up answer's button carries data-detail; a one-step answer's carries data-verdict.
-    /** @param {string} verdict @param {string|null} detail */
-    function flashChosen(verdict, detail) {
+    // follow-up answer's button carries data-detail; a one-step answer's carries data-verdict. A card
+    // with a status slot (the comparison card) says there what was saved, as it does on return.
+    /** @param {ReviewItem} it @param {Decided} decided */
+    function flashChosen(it, decided) {
       if (typeof document === "undefined") return;
-      var card = appEl.querySelector(".card");
-      if (!card) return;
+      var detail = decided.detail;
       var attr = detail != null ? "data-detail" : "data-verdict";
-      var v = detail != null ? detail : verdict;
+      var v = detail != null ? detail : decided.verdict;
       var sel = "[" + attr + '="' + (typeof CSS !== "undefined" && CSS.escape ? CSS.escape(v) : v) + '"]';
-      var btn = card.querySelector(sel);
+      var btn = appEl.querySelector(sel);
       if (btn) btn.classList.add("primary", "just-picked");
+      var slot = appEl.querySelector(".status-slot");
+      if (slot) slot.textContent = W.savedText(it, decided, CONFIG);
+      // The card stays until the advance: its flags and note would change nothing saved, so they rest.
+      appEl.querySelectorAll("[data-flag], [data-note]").forEach(function (control) {
+        /** @type {HTMLInputElement|HTMLTextAreaElement} */ (control).disabled = true;
+      });
     }
 
     // Advance/retreat, gated by the confirm beat so a nav action can't race a pending choice-advance.
@@ -1179,20 +1222,109 @@
       renderLabel(screen);
     }
 
+    // Record an item's answer and queue it for the reviewer's verdict file (only the active session
+    // auto-saves).
+    /** @param {LabelScreen} screen @param {ReviewItem} it @param {Decided} decided */
+    function record(screen, it, decided) {
+      view.localVerdicts[it.item_id] = decided;
+      delete view.unsaved[it.item_id];
+      if (isActive()) { verdictWriter.queue(screen.bucket.bucket_id, reviewer, it.item_id, decided); markSaving(); }
+    }
+
+    // A flag or a note changed on an item already answered: its answer saved again with them, in
+    // place (no advance). Each save is a fresh answer object, so the writer tells it from the one it
+    // may be flushing.
+    /** @param {LabelScreen} screen @param {ReviewItem} it @param {Decided} before @param {string|undefined} note @param {string[]|undefined} flags */
+    function saveInPlace(screen, it, before, note, flags) {
+      record(screen, it, decidedOf(before.verdict, before.detail, before.partition, note, flags));
+    }
+
+    // Whether items of a kind are comparison items: the kind whose answered cell a flag or a note saves
+    // in place, and whose bucket loads the reviewer's saved answers.
+    /** @param {string} stratum @returns {boolean} */
+    function isComparison(stratum) { return W.kindLayout(CONFIG, stratum) === "comparison"; }
+
+    // The reviewer set or cleared a flag: kept for the answer to come, or saved in place on an answered
+    // item. The card shows the new set either way.
+    /** @param {LabelScreen} screen @param {ReviewItem} it @param {string[]} flags */
+    function changeFlags(screen, it, flags) {
+      if (choiceLocked) return;
+      var before = view.localVerdicts[it.item_id];
+      if (before && isComparison(it.stratum)) saveInPlace(screen, it, before, before.note, flags);
+      else view.flags[it.item_id] = flags;
+      renderLabel(screen, true);
+    }
+
+    // The reviewer typed a note: kept for the answer to come, and on an answered comparison item saved
+    // in place. Typing never re-renders, which would lose the caret.
+    /** @param {LabelScreen} screen @param {ReviewItem} it @param {string} note */
+    function changeNote(screen, it, note) {
+      if (choiceLocked) return;
+      var before = view.localVerdicts[it.item_id];
+      if (before && isComparison(it.stratum)) saveInPlace(screen, it, before, note, before.flags);
+      else view.notes[it.item_id] = note;
+    }
+
+    // Read the reviewer's saved answers to the screen's bucket: from the writer's snapshot of the
+    // verdict file when it holds one, else from GitHub (retried as every read is). The answers fill the
+    // items no answer in memory or in the writer covers, each kept with its cell's timestamp; the screen's
+    // answers are then known, or unknown when the read failed. A retry runs this again.
+    /** @param {LabelScreen} screen */
+    function loadAnswers(screen) {
+      var bucket = screen.bucket;
+      var owner = reviewer;
+      var path = verdictPath(bucket.bucket_id, owner);
+      var snap = verdictWriter.snapshot(bucket.bucket_id, owner);
+      /** @type {Promise<Record<string, VerdictCell>>} */
+      var read = snap ? Promise.resolve(snap.decisions) : retryWithBackoff(function () { return ghGet(path); }, MAX_TRIES).then(function (cur) {
+        return cur ? C.unionVerdicts({}, verdictDecisions(cur.json, path)) : {};
+      });
+      read.then(function (cells) {
+        var fill = C.cellsToLoad(cells, bucket.item_ids, function (id) {
+          return !!view.localVerdicts[id] || verdictWriter.isQueued(bucket.bucket_id, owner, id);
+        });
+        Object.keys(fill).forEach(function (id) {
+          var cell = /** @type {VerdictCell} */ (fill[id]);
+          var decided = decidedOf(cell.verdict, cell.detail == null ? null : cell.detail, cell.partition, cell.note, cell.flags);
+          view.localVerdicts[id] = decided;
+          view.loaded[id] = { decided: decided, timestamp: cell.timestamp };
+        });
+        settle("known");
+      }, function (/** @type {unknown} */ e) {
+        if (isAuthError(e)) { markAuthFailed(); recomputeMode(); }
+        else if (typeof console !== "undefined") console.warn("calibration: the saved answers did not load:", e);
+        settle("unknown");
+      });
+      /** @param {SavedState} state */
+      function settle(state) {
+        screen.saved = state;
+        // the card shown re-renders in place; during a commit's beat the advance renders it
+        if (view.screen === screen && !choiceLocked) renderLabel(screen, true);
+      }
+    }
+
+    // The saved answers could not be read: read them again.
+    /** @param {LabelScreen} screen */
+    function retryLoad(screen) {
+      screen.saved = "loading";
+      renderLabel(screen, true);
+      loadAnswers(screen);
+    }
+
     // One place both the click and the keydown paths commit an answer + advance.
     /** @param {LabelScreen} screen @param {ReviewItem} it the item shown @param {string} verdict @param {string|null} detail @param {Partition} [partition] */
     function chooseAndAdvance(screen, it, verdict, detail, partition) {
       if (choiceLocked) return; // mid-confirm beat — ignore extra presses (see CHOICE_ADVANCE_MS)
       var typed = view.notes[it.item_id];
       var before = view.localVerdicts[it.item_id];
-      var decided = decidedOf(verdict, detail, partition, typed !== undefined ? typed : before && before.note);
-      view.localVerdicts[it.item_id] = decided;
+      var decided = decidedOf(verdict, detail, partition, typed !== undefined ? typed : before && before.note,
+        W.currentFlags(view.flags[it.item_id], before));
       delete view.drafts[it.item_id]; // the committed answer is the item's state now
       delete view.notes[it.item_id];
+      delete view.flags[it.item_id];
       resetItemState(screen);
-      delete view.unsaved[it.item_id];
-      if (isActive()) { verdictWriter.queue(screen.bucket.bucket_id, reviewer, it.item_id, decided); markSaving(); } // gated: only the active session auto-saves
-      flashChosen(verdict, detail); // confirm on the button…
+      record(screen, it, decided);
+      flashChosen(it, decided); // confirm on the button…
       choiceLocked = true;
       setTimeout(function () { // …then advance — unless the reviewer left this labeling session during the beat
         choiceLocked = false;
@@ -1208,8 +1340,9 @@
     /** @param {Bucket} bucket @returns {boolean} */
     function completingOn(bucket) { return view.screen.kind === "completing" && view.screen.bucket === bucket; }
 
-    /** @param {LabelScreen} screen */
-    function renderLabel(screen) {
+    // `stay`: the render redraws the item shown, so the card keeps the reviewer's scroll position.
+    /** @param {LabelScreen} screen @param {boolean} [stay] */
+    function renderLabel(screen, stay) {
       view.screen = screen;
       var bucket = screen.bucket;
       var items = scaffoldsFor(bucket);
@@ -1260,14 +1393,17 @@
         appEl.appendChild(noticeEl);
       }
       var main = el("div", null); appEl.appendChild(main);
-      // scored items are BLIND — reveal:false, no machine answer shown, ever.
+      // scored items never reveal — reveal:false, no machine answer shown, ever (a comparison item's
+      // proposal is part of the item, shown before any answer, not a reveal).
       W.renderReviewItem(document, main, it, (view.localVerdicts[it.item_id] || null), CONFIG, {
         reveal: false, pending: screen.pending, draft: view.drafts[it.item_id] || null, focusMember: screen.draftMember,
-        note: view.notes[it.item_id], position: screen.idx + 1, total: items.length,
+        note: view.notes[it.item_id], flags: view.flags[it.item_id], stay: !!stay, saved: screen.saved,
+        position: screen.idx + 1, total: items.length, onRetryLoad: function () { retryLoad(screen); },
         onChoose: function (verdict, detail, partition) { chooseAndAdvance(screen, it, verdict, detail, partition); },
         onPending: function (verdict) { choosePending(screen, verdict); },
         onDraft: function (draft, memberId) { changeDraft(screen, it, draft, memberId); },
-        onNote: function (note) { view.notes[it.item_id] = note; },
+        onNote: function (note) { changeNote(screen, it, note); },
+        onFlags: function (flags) { changeFlags(screen, it, flags); },
         onNext: function () { goNext(screen); },
         onPrev: function () { goPrev(screen); },
       });
@@ -1314,7 +1450,9 @@
         exported: new Date().toISOString(), decisions: {} };
       Object.keys(view.localVerdicts).forEach(function (id) {
         var d = view.localVerdicts[id];
-        if (d) out.decisions[id] = verdictCell(d, Date.now());
+        var loaded = view.loaded[id];
+        // an answer read from the verdict file and unchanged since keeps the time it was given
+        if (d) out.decisions[id] = verdictCell(d, loaded && loaded.decided === d ? loaded.timestamp : Date.now());
       });
       var blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
       var url = URL.createObjectURL(blob);
@@ -1351,8 +1489,12 @@
       W.reviewItemKeydown(e, it
         ? Object.assign(nav, {
           item: it,
+          decided: view.localVerdicts[it.item_id] || null,
+          flags: view.flags[it.item_id],
+          saved: screen.saved,
           onChoose: function (/** @type {string} */ verdict, /** @type {string|null} */ detail) { chooseAndAdvance(screen, it, verdict, detail); },
           onPending: function (/** @type {string|null} */ verdict) { choosePending(screen, verdict); },
+          onFlags: function (/** @type {string[]} */ flags) { changeFlags(screen, it, flags); },
         })
         : Object.assign(nav, { item: null }));
     }

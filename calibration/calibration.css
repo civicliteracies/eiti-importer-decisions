@@ -69,17 +69,16 @@ select, .name-input {
 .names { display: flex; flex-direction: column; gap: 0.6rem; margin: 0.5rem 0 1.4rem; }
 .name { background: var(--bg-soft); border: 1px solid var(--rule-soft); border-radius: 10px;
   padding: 0.85rem 1rem; font-size: 1.1rem; font-weight: 500; word-break: break-word; }
-/* An item's facts, quotes and judges, under its names: a reading measure of about 72 characters, a
-   little air between items, and a long identifier broken rather than pushed past the card's edge. */
+/* An item's facts and quotes, under its names: a reading measure of about 72 characters, a little air
+   between items, and a long identifier broken rather than pushed past the card's edge. */
 .details { margin: -0.6rem 0 1.4rem; font-size: 0.9rem; line-height: 1.5; color: var(--fg-muted); }
 /* A partition item has no names: its details follow the question directly. */
 .q + .details { margin-top: 0.4rem; }
-.details .facts, .details .judges { margin: 0.4rem 0; padding-left: 1.2rem; max-width: 72ch; }
-.details .facts li + li, .details .judges li + li, .member .facts li + li { margin-top: 0.35rem; }
+.details .facts { margin: 0.4rem 0; padding-left: 1.2rem; max-width: 72ch; }
+.details .facts li + li, .member .facts li + li { margin-top: 0.35rem; }
 .details li, .details .quote p, .member .facts li { overflow-wrap: anywhere; }
 .details .quote { margin: 0.5rem 0; padding: 0.5rem 0.85rem; border-left: 3px solid var(--rule); background: var(--bg-soft); border-radius: 0 8px 8px 0; max-width: 72ch; }
 .details .quote p { margin: 0 0 0.25rem; }
-.details .judge-name { font-weight: 600; }
 /* The first answer of a two-step choice, shown above its follow-up question. */
 .step { font-size: 0.85rem; color: var(--fg-subtle); margin: -0.6rem 0 0.75rem; }
 button.step-back { width: 100%; }
@@ -113,6 +112,9 @@ button.step-back { width: 100%; }
 .answers.layout-list .unsure-row { margin-top: 0.85rem; }
 .answers.layout-list .key { flex: none; min-width: 1.9em; color: var(--fg-subtle); font-variant-numeric: tabular-nums; }
 .answers.layout-list .label { max-width: 68ch; }
+/* A choice's meaning, under its name. */
+.label .meaning { display: block; font-size: 0.86rem; color: var(--fg-muted); }
+.primary .label .meaning { color: inherit; }
 .answers.layout-list .primary .key { color: inherit; }
 /* On a narrow screen equal columns would wrap even short labels: a row stacks too. */
 @media (max-width: 36rem) {
@@ -199,3 +201,172 @@ button.step-back { width: 100%; }
 .note { display: block; margin-top: 0.4rem; font-size: 0.88rem; color: var(--fg-muted); }
 .note textarea { display: block; width: 100%; box-sizing: border-box; font: inherit; }
 .unsaved { margin-top: 0.4rem; font-size: 0.88rem; color: var(--fg-muted); }
+
+/* ---- The comparison card ---------------------------------------------------------------------------
+   A comparison item on one screen: the records header, the proposal, the records field by field and the
+   research in the main column, the decision in a sticky column beside them. Below 60rem the decision is
+   a bottom dock (accept in one tap, or open the other answers) and the panel is a bottom sheet. */
+.wrap:has(.cmp) { max-width: 72rem; }
+.cmp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-items: start; }
+.cmp-main { min-width: 0; }
+.cmp-main > .card + .card { margin-top: 1rem; }
+.cmp .card { padding: 1.25rem; box-shadow: 0 1px 2px rgba(19, 40, 86, 0.05), 0 6px 18px rgba(19, 40, 86, 0.05); }
+.cmp-eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-subtle);
+  font-weight: 600; margin: 0 0 0.35rem; }
+.cmp-main .cmp-eyebrow:not(:first-child) { margin-top: 1.1rem; }
+.cmp-help { font-size: 0.82rem; color: var(--fg-subtle); margin: 0 0 0.6rem; max-width: 72ch; line-height: 1.5; }
+/* where the reviewer's saved answers stand while they are not known: loading, or not read (with a retry) */
+.cmp-load { margin: 0 0 1rem; padding: 0.55rem 0.85rem; font-size: 0.88rem; color: var(--fg-muted); background: var(--accent-soft);
+  border: 1px solid var(--rule); border-radius: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; }
+.cmp-load.failed { color: var(--pending); font-weight: 600; background: var(--pending-bg); border-color: var(--pending-rule); }
+.cmp-load button.cmp-retry { margin: 0; flex: none; }
+.cmp-reason { margin-top: 0.15rem; }
+h2.cmp-q { font-family: var(--sans); font-size: 1.15rem; font-weight: 600; letter-spacing: normal; color: var(--fg);
+  margin: 0 0 0.9rem; padding: 0; border: 0; }
+
+/* the records, side by side, each named by its role and kind */
+.cmp-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.75rem; }
+.cmp-rec { background: var(--bg-soft); border: 1px solid var(--rule-soft); border-radius: 8px; padding: 0.8rem 0.9rem; min-width: 0; }
+.cmp-kind { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-subtle); font-weight: 600; }
+.cmp-name { font-size: 1.1rem; font-weight: 600; line-height: 1.3; margin: 0.2rem 0 0.25rem; overflow-wrap: anywhere; text-wrap: balance; }
+.cmp-sub { font-size: 0.85rem; color: var(--fg-muted); }
+.cmp-notice { margin: 0.75rem 0 0; padding: 0.6rem 0.8rem; font-size: 0.88rem; background: var(--pending-bg);
+  border: 1px solid var(--pending-rule); border-radius: 8px; }
+
+/* the proposal: a navy rule when an answer is proposed, the EITI gold when none is */
+.cmp-proposal { border-left: 4px solid var(--accent); }
+.cmp-proposal.open { border-left-color: var(--pending-accent); }
+.cmp-prop-head { display: flex; flex-wrap: wrap; gap: 0.4rem 0.75rem; align-items: baseline; }
+.cmp-prop-answer { font-size: 1.2rem; font-weight: 600; }
+.cmp-prop-by { font-size: 0.85rem; color: var(--fg-muted); }
+.cmp-prob { display: inline-block; font-variant-numeric: tabular-nums; background: var(--bg-soft); border-radius: 999px;
+  padding: 0.05rem 0.55rem; font-size: 0.8rem; color: var(--fg-muted); }
+.cmp-judges { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.6rem; margin-top: 0.75rem; }
+.cmp-judge { background: var(--bg-soft); border-radius: 8px; padding: 0.6rem 0.75rem; font-size: 0.9rem; min-width: 0; }
+.cmp-judge-name { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-subtle); font-weight: 600; }
+.cmp-judge-answer { font-weight: 600; }
+.cmp-judge-missing { color: var(--fg-muted); }
+.cmp-probs { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.3rem; }
+.cmp-rationale { margin: 0.6rem 0 0; line-height: 1.55; font-size: 0.95rem; max-width: 72ch; overflow-wrap: anywhere; }
+/* A claim id in the rationale: a chip that sits tight in its text, as "(c1, …" reads, with no gap of its own. */
+.cite { display: inline-block; font-size: 0.78rem; font-family: var(--mono); background: var(--accent-soft); color: var(--accent);
+  border-radius: 4px; padding: 0 0.2rem; margin: 0; text-decoration: none; white-space: nowrap; }
+.cite:hover, .cite:focus-visible { background: var(--accent); color: #fff; }
+.cmp-weighed { margin: 0.6rem 0 0; font-size: 0.82rem; color: var(--fg-muted); line-height: 1.5; }
+.cmp-weighed b { font-weight: 600; }
+.cmp-why { margin: 0.7rem 0 0; font-size: 0.82rem; color: var(--fg-subtle); }
+
+/* the comparison: one row per concept, each record a column; a row whose cells read the same is tinted */
+table.cmp-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; table-layout: fixed; }
+.cmp-table th, .cmp-table td { text-align: left; vertical-align: top; padding: 0.55rem 0.5rem; border-top: 1px solid var(--rule-soft); }
+.cmp-table thead th { border-top: 0; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-subtle); padding-top: 0; }
+.cmp-table th.cmp-concept { width: 7.5rem; color: var(--fg-muted); font-weight: 500; font-size: 0.85rem; }
+.cmp-table td { overflow-wrap: anywhere; }
+.cmp-lbl { display: block; font-size: 0.75rem; color: var(--fg-subtle); }
+.cmp-v + .cmp-v { margin-top: 0.35rem; }
+.cmp-v a { color: var(--accent); }
+.cmp-table td.empty { color: var(--fg-subtle); }
+.cmp-table td.empty::before { content: "—"; }
+.cmp-table tr.same td { background: #eef7f0; }
+.cmp-more { font: inherit; font-size: 0.82rem; color: var(--accent); background: none; border: 0; padding: 0; margin: 0.15rem 0 0;
+  text-decoration: underline; text-decoration-color: var(--rule); }
+.cmp-more:hover { text-decoration-color: var(--accent); }
+.cmp .hidden { display: none; }
+details.cmp-extra summary { cursor: pointer; font-size: 0.85rem; color: var(--fg-muted); margin-top: 0.5rem; }
+
+/* the research */
+.cmp-claim { border-top: 1px solid var(--rule-soft); padding: 0.8rem 0; }
+.cmp-help + .cmp-claim { border-top: 0; padding-top: 0.2rem; }
+.cmp-claim:focus { outline: none; }
+.cmp-claim:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cmp-cid { font-family: var(--mono); font-size: 0.78rem; color: var(--accent); margin-right: 0.4rem; }
+.cmp-claim p { margin: 0 0 0.45rem; line-height: 1.5; max-width: 72ch; }
+.cmp-ev { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.35rem; }
+.cmp-ev li { font-size: 0.88rem; color: var(--fg-muted); padding-left: 1.4rem; position: relative; overflow-wrap: anywhere; }
+.cmp-ev li::before { position: absolute; left: 0; top: 0; font-weight: 700; }
+.cmp-ev li.verified::before { content: "✓"; color: #1e7d43; }
+.cmp-ev li.refused::before { content: "✗"; color: #b42318; }
+.cmp-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.cmp-ev blockquote { margin: 0; padding: 0.35rem 0.7rem; border-left: 3px solid var(--rule); background: var(--bg-soft);
+  border-radius: 0 8px 8px 0; color: var(--fg); font-style: italic; }
+.cmp-src, .cmp-reason { font-size: 0.78rem; color: var(--fg-subtle); }
+.cmp-src a { color: var(--accent); }
+.cmp-reason { color: #b42318; }
+.cmp-others { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.4rem; }
+.cmp-others li { display: flex; flex-wrap: wrap; gap: 0.25rem 0.6rem; align-items: baseline; font-size: 0.9rem; }
+.cmp-other-fields { flex-basis: 100%; font-size: 0.85rem; color: var(--fg-muted); }
+
+/* the decision */
+.cmp-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.cmp-panel-head .cmp-eyebrow { margin: 0; }
+button.cmp-close { display: none; margin: 0; }
+button.cmp-accept { width: 100%; margin: 0.75rem 0 0; padding: 0.85rem 1rem; font-size: 1rem; font-weight: 600; min-height: 48px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
+.cmp-accept .key, .cmp-choice .key { font-family: var(--mono); font-weight: 400; font-size: 0.8rem; }
+.cmp-accept .key { opacity: 0.8; }
+button.cmp-accept[disabled] { opacity: 0.5; cursor: not-allowed; transform: none; }
+.cmp-choices { list-style: none; padding: 0; margin: 0.6rem 0 0; display: grid; gap: 0.4rem; }
+button.cmp-choice { display: flex; gap: 0.6rem; align-items: flex-start; width: 100%; margin: 0; padding: 0.6rem 0.7rem;
+  text-align: left; border: 1px solid var(--rule-soft); border-radius: 10px; background: var(--bg-elevated); line-height: 1.35;
+  font-size: 0.9rem; color: var(--fg); min-height: 44px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: background 150ms, color 150ms, border-color 150ms, box-shadow 150ms, transform 120ms; }
+button.cmp-choice:not(.primary):hover { border-color: var(--rule); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+.cmp-choice .key { flex: none; min-width: 1.6em; color: var(--fg-subtle); padding-top: 0.1em; }
+.cmp-txt b { display: block; font-weight: 600; }
+.cmp-txt .meaning { color: var(--fg-muted); font-size: 0.84rem; }
+button.cmp-choice.proposed { border-color: var(--accent); background: var(--accent-soft); }
+.cmp-tag { margin-left: auto; flex: none; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent);
+  font-weight: 700; padding-top: 0.25em; }
+button.cmp-choice.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.cmp-choice.primary .key, .cmp-choice.primary .meaning, .cmp-choice.primary .cmp-tag { color: #fff; }
+button.cmp-choice.just-picked { animation: calib-pick 160ms ease-out; }
+.cmp-flags { margin-top: 0.9rem; display: grid; gap: 0.45rem; }
+.cmp-flag { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.86rem; color: var(--fg-muted); }
+.cmp-flag input { margin-top: 0.2rem; flex: none; }
+.cmp-note textarea { margin-top: 0.25rem; border: 1px solid var(--rule); border-radius: 8px; padding: 0.4rem 0.5rem; }
+.status-slot { min-height: 1.5em; line-height: 1.5; font-size: 0.82rem; color: #1e7d43; margin-top: 0.6rem; }
+.cmp-decision .nav { margin-top: 0.5rem; }
+.cmp-decision .nav button { margin: 0; }
+.cmp-keys { font-size: 0.78rem; color: var(--fg-subtle); margin: 0.6rem 0 0; line-height: 1.6; }
+.cmp kbd { font-family: var(--mono); font-size: 0.8em; border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 4px;
+  padding: 0 0.3em; background: var(--bg-soft); color: var(--fg-muted); }
+.cmp-dock, .cmp-backdrop { display: none; }
+@media (min-width: 60rem) {
+  .cmp { grid-template-columns: minmax(0, 1fr) 22rem; }
+  .cmp-aside { position: sticky; top: 1rem; }
+}
+@media (max-width: 59.99rem) {
+  .wrap:has(.cmp) { padding-bottom: 7rem; }
+  .cmp-aside { display: contents; }
+  .cmp-decision { display: none; }
+  .cmp-decision.open { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; max-height: 86vh; overflow: auto;
+    border-radius: 16px 16px 0 0; padding: 0.9rem 1rem calc(1rem + env(safe-area-inset-bottom)); }
+  .cmp-decision.open button.cmp-close { display: inline-flex; }
+  .cmp-decision .cmp-accept, .cmp-decision .cmp-keys { display: none; }
+  .cmp-backdrop.open { display: block; position: fixed; inset: 0; background: rgba(19, 40, 86, 0.35); z-index: 25; }
+  .cmp-dock { display: flex; position: fixed; left: 0; right: 0; bottom: 0; gap: 0.5rem; z-index: 20;
+    padding: 0.6rem 0.75rem calc(0.6rem + env(safe-area-inset-bottom)); background: var(--bg-elevated);
+    border-top: 1px solid var(--rule); box-shadow: 0 -6px 18px rgba(19, 40, 86, 0.08); }
+  .cmp-dock button { margin: 0; min-height: 48px; flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center;
+    justify-content: center; font-size: 0.95rem; line-height: 1.25; }
+  .cmp-dock .cmp-dock-accept { flex: 1.6 1 0; font-weight: 600; }
+  /* the comparison keeps one column per record; the concept becomes a row header above them */
+  .cmp-table, .cmp-table tbody, .cmp-table thead { display: block; }
+  .cmp-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 0.5rem;
+    border-top: 1px solid var(--rule-soft); padding: 0.35rem 0; }
+  .cmp-table[data-cols="1"] tr { grid-template-columns: minmax(0, 1fr); }
+  .cmp-table[data-cols="3"] tr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cmp-table[data-cols="4"] tr { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cmp-table thead tr { border-top: 0; }
+  .cmp-table thead th.cmp-concept { display: none; }
+  .cmp-table th.cmp-concept { grid-column: 1 / -1; width: auto; border: 0; padding: 0.1rem 0.25rem 0; font-size: 0.72rem;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-subtle); }
+  .cmp-table td, .cmp-table thead th { border: 0; padding: 0.15rem 0.25rem; min-width: 0; }
+  .cmp-table td.empty::before { content: "none"; }
+  .cmp-table td { overflow-wrap: normal; hyphens: auto; }
+  .cmp-pair { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  button.cmp-choice.just-picked { animation: none; }
+  button.cmp-choice, button.cmp-accept { transition: none; }
+}

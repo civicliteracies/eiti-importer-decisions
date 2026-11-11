@@ -15,10 +15,12 @@
     "kinds": {
       "split": {
         "question": "The panel kept these as SEPARATE entities. Are they actually the same real entity?",
+        "layout": "names",
         "choices": [["same", "Same entity"], ["different", "Different entities"]]
       },
       "disposition": {
         "question": "Is this a real entity, or junk / a placeholder / an aggregate label?",
+        "layout": "names",
         "choices": [["entity", "Real entity"], ["not_entity", "Junk / placeholder"]]
       }
     },

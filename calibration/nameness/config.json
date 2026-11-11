@@ -15,6 +15,7 @@
     "kinds": {
       "nameness": {
         "question": "What does this name stand for in the report's column?",
+        "layout": "names",
         "choices": [
           ["names_one", "One entity"],
           ["stands_for_several", "A label for entities the report does not name"],

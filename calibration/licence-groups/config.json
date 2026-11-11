@@ -15,6 +15,7 @@
     "kinds": {
       "licence_group": {
         "question": "These projects are connected by a licence. A project is the activities under one licence, contract or concession, or under agreements the country documents as one. Which of them are one project?",
+        "layout": "partition",
         "partition": {
           "verdict": "partition",
           "own": "Its own project",

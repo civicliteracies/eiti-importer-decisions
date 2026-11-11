@@ -13,10 +13,11 @@
    refuses them, bucketStatus reports "excluded", nextOpenBucket skips it). A second-round bucket
    excludes the reviewers whose own labels it re-reviews.
 
-   A verdict cell is { verdict, detail?, partition?, note?, timestamp }: `detail` carries the follow-up
-   answer of a two-step choice and is absent for a one-step one; `partition` carries a partition kind's
-   answer, each member's id to the id of the member that is its project; `note` is what the reviewer
-   wrote beside the answer.
+   A verdict cell is { verdict, detail?, partition?, note?, flags?, timestamp }: `detail` carries the
+   follow-up answer of a two-step choice and is absent for a one-step one; `partition` carries a
+   partition kind's answer, each member's id to the id of the member that is its project; `note` is
+   what the reviewer wrote beside the answer; `flags` the values of the kind's flags the reviewer set
+   beside it.
 
    The `sessions` map is the cross-browser single-active-session marker: a capacity-1 claim-lease keyed
    by sessionId with a short staleness horizon (SESSION_TTL_MS). It is refreshed lazily and NEVER
@@ -36,7 +37,7 @@
  * @typedef {{ claimants: Claimant[], completed_by: string[] }} BucketState
  * @typedef {{ sessionId: string, ts: number }} SessionRec
  * @typedef {{ roster: string[], buckets: Record<string, BucketState>, sessions?: Record<string, SessionRec> }} CoordState
- * @typedef {{ verdict: string, detail?: string, partition?: Record<string, string>, note?: string, timestamp: number }} VerdictCell
+ * @typedef {{ verdict: string, detail?: string, partition?: Record<string, string>, note?: string, flags?: string[], timestamp: number }} VerdictCell
  * @typedef {{ ok: boolean, reason?: string, state: CoordState }} CoordResult
  * @typedef {{ bucket_id: string, stratum: string, item_ids: string[], confirmations_required: number,
  *   excluded_reviewers?: string[] }} Bucket
@@ -369,8 +370,9 @@
   /**
    * Merge one reviewer's verdict cells into an accumulator, latest timestamp winning per item (a
    * same-reviewer multi-device union — a re-pull can't double-count). The winning cell keeps its
-   * string `detail`, its `partition` and its string `note`; a cell without one stays without one. A cell whose
-   * `partition` is no partition is dropped whole, so a partition answer always carries one.
+   * string `detail`, its `partition`, its string `note` and its `flags` (a list of strings); a cell
+   * without one stays without one, and the losing cell's never join it. A cell whose `partition` is no
+   * partition is dropped whole, so a partition answer always carries one.
    * @param {Record<string, VerdictCell>} acc
    * @param {Record<string, unknown>} decisions - a verdict file's cells as read; a cell that is not an
    *   object with a string `verdict` is dropped
@@ -392,9 +394,30 @@
       if (typeof cell.detail === "string") next.detail = cell.detail;
       if (isPartition(cell.partition)) next.partition = Object.assign({}, cell.partition);
       if (typeof cell.note === "string") next.note = cell.note;
+      var flags = cell.flags;
+      if (Array.isArray(flags) && flags.every(function (f) { return typeof f === "string"; })) next.flags = flags.slice();
       acc[itemId] = next;
     });
     return acc;
+  }
+
+  /**
+   * The cells of a reviewer's verdict file that fill the reviewer's answers in memory: each of
+   * `itemIds` the file answers for which `kept(itemId)` is false (no answer in memory, nothing pending
+   * to be saved). An answer in memory always wins over the file, which may be older than it.
+   * @param {Record<string, VerdictCell>} cells - the file's cells, as unionVerdicts reads them
+   * @param {string[]} itemIds - the items of the bucket the file is of
+   * @param {(itemId: string) => boolean} kept - whether an item's answer in memory stands
+   * @returns {Record<string, VerdictCell>}
+   */
+  function cellsToLoad(cells, itemIds, kept) {
+    /** @type {Record<string, VerdictCell>} */
+    var out = {};
+    itemIds.forEach(function (id) {
+      var cell = Object.prototype.hasOwnProperty.call(cells, id) ? cells[id] : undefined;
+      if (cell && !kept(id)) out[id] = cell;
+    });
+    return out;
   }
 
   // ---- single-active-session presence (a capacity-1 claim-lease keyed by sessionId) ----------------
@@ -591,6 +614,7 @@
     release: release,
     complete: complete,
     unionVerdicts: unionVerdicts,
+    cellsToLoad: cellsToLoad,
     classifyError: classifyError,
     isRetryable: isRetryable,
     activeSession: activeSession,
