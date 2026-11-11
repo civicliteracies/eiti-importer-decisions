@@ -10,9 +10,7 @@
    Layouts: a kind's `layout` is how its items are laid out. "names" shows an item's names and details
    with the choices under them; "partition" asks how an item's members group; "comparison" shows two or
    more records side by side, the proposal the item carries, the research behind it and the decision
-   beside them. A kind that declares no layout is read from its shape (layoutOf): partition when it
-   carries `partition`, names otherwise. That reading serves the EITI dashboard's decision-review page,
-   whose published config declares no layout.
+   beside them. Every kind declares its layout; validateReviewConfig refuses one that does not.
 
    Blindness invariant (names and partition items): the machine verdict is rendered ONLY inside the
    reveal, and the reveal appears ONLY after the reviewer has committed (decided != null), the shell
@@ -77,18 +75,17 @@
  *   verdict a partition answer commits, the labels of "its own project", "same project as" and the save
  *   button, and of the note box when the page offers one
  * @typedef {[string, string]} UnsureChoice - [name, meaning]: how a comparison kind words its unsure choice
- * @typedef {{ question: string, layout?: "names" | "comparison", choices: Choice[], flags?: Flag[],
+ * @typedef {{ question: string, layout: "names" | "comparison", choices: Choice[], flags?: Flag[],
  *   followUp?: Record<string, FollowUp>, partition?: undefined, unsure_choice?: UnsureChoice,
  *   source_details?: string }} ChoiceKind - a comparison kind words its unsure choice and the summary
  *   of its collapsed source rows (both required there, refused elsewhere)
- * @typedef {{ question: string, layout?: "partition", partition: PartitionConfig, choices?: undefined,
+ * @typedef {{ question: string, layout: "partition", partition: PartitionConfig, choices?: undefined,
  *   flags?: undefined, followUp?: undefined, unsure_choice?: undefined, source_details?: undefined }} PartitionKind
  * @typedef {ChoiceKind | PartitionKind} KindConfig - a choice kind (choices) or a partition kind (partition)
  * @typedef {{ kinds: Record<string, KindConfig>, unsure: string }} ReviewConfig
  * @typedef {{ id: string, label: string, facts?: string[] }} ItemMember
  * @typedef {Record<string, string>} Partition - each member's id to the id of the member that is its project
- * @typedef {{ text: string, url: string }} Quote
- * @typedef {{ facts?: string[], quotes?: Quote[] }} ItemDetails
+ * @typedef {{ facts?: string[] }} ItemDetails
  * @typedef {{ role: string, kind: string, name: string, key: string, countries: string[] }} Subject - a
  *   record the question is about: its role in the question, the kind of record it is, its name, its
  *   key and the countries it names (none for a record that names none)
@@ -170,7 +167,7 @@
   var ROW_CHARS = 80;
   var KEY_CHARS = 4;
 
-  // The layouts a kind's config may declare (KindConfig.layout).
+  // The layouts a kind's config declares one of (KindConfig.layout).
   var LAYOUTS = ["names", "comparison", "partition"];
 
   // The closed sets a comparison item's values come from, which the card words one case each: what
@@ -204,21 +201,10 @@
   }
 
   /**
-   * A kind's layout: the one its config declares, else the one its shape implies (partition for a kind
-   * carrying `partition`, names otherwise), which is how the EITI dashboard's decision-review page,
-   * whose config declares no layout, is read.
-   * @param {KindConfig} kc @returns {Layout}
-   */
-  function layoutOf(kc) {
-    if (kc.layout) return kc.layout;
-    return kc.partition ? "partition" : "names";
-  }
-
-  /**
    * The layout of the kind `kind` of a config. Throws on a kind the config does not define.
    * @param {ReviewConfig} config @param {string} kind @returns {Layout}
    */
-  function kindLayout(config, kind) { return layoutOf(kindFor(config, kind)); }
+  function kindLayout(config, kind) { return kindFor(config, kind).layout; }
 
   /**
    * An item's flags as they stand: the ones the reviewer has set and not yet saved (`flags`), else the
@@ -450,7 +436,7 @@
     var stratum = item.stratum;
     var kc = typeof stratum === "string" && own(config.kinds, stratum) ? config.kinds[stratum] : undefined;
     if (!kc) return { ok: false, reason: where + ": the config defines no kind " + JSON.stringify(stratum) };
-    var layout = layoutOf(kc);
+    var layout = kc.layout;
     if (layout === "comparison") {
       var bad = checkComparisonItem(item, kc);
       return bad ? { ok: false, reason: where + ": " + bad } : { ok: true };
@@ -737,8 +723,8 @@
       if (!isObject(kc) || typeof kc.question !== "string" || !kc.question) return { ok: false, reason: where + ": question must be a non-empty string" };
       if ((kc.choices == null) === (kc.partition == null)) return { ok: false, reason: where + ": a kind has either choices or a partition" };
       var layout = kc.layout;
-      if (layout !== undefined && (typeof layout !== "string" || LAYOUTS.indexOf(layout) === -1)) return { ok: false, reason: where + ": layout must be one of " + LAYOUTS.join(", ") };
-      if (layout !== undefined && (layout === "partition") !== (kc.partition != null)) return { ok: false, reason: where + ": a kind has a partition exactly when its layout is partition" };
+      if (typeof layout !== "string" || LAYOUTS.indexOf(layout) === -1) return { ok: false, reason: where + ": layout must be one of " + LAYOUTS.join(", ") };
+      if ((layout === "partition") !== (kc.partition != null)) return { ok: false, reason: where + ": a kind has a partition exactly when its layout is partition" };
       if (kc.flags != null && layout !== "comparison") return { ok: false, reason: where + ": only a comparison kind offers flags" };
       var worded = isList(kc.unsure_choice) && kc.unsure_choice.length === 2 && kc.unsure_choice.every(nonEmpty) && nonEmpty(kc.source_details);
       if (layout === "comparison" && !worded) return { ok: false, reason: where + ": a comparison kind words its unsure choice ([name, meaning]) and its source details" };
@@ -775,7 +761,7 @@
     return { ok: true };
   }
 
-  /** The link target for a quote's url: the parsed URL when it is https, else null. @param {unknown} url @returns {string|null} */
+  /** The link target for a url: the parsed URL when it is https, else null. @param {unknown} url @returns {string|null} */
   function httpsHref(url) {
     try {
       var u = new URL(String(url));
@@ -786,42 +772,22 @@
   }
 
   /**
-   * The item's facts and quotes, every string written with textContent. Null when the item
-   * carries none.
+   * The item's facts, each written with textContent. Null when the item carries none.
    * @param {Document} doc @param {ItemDetails|undefined} details @returns {HTMLElement|null}
    */
   function renderDetails(doc, details) {
-    if (!details) return null;
+    if (!details || !details.facts || !details.facts.length) return null;
     var box = doc.createElement("div");
     box.className = "details";
-    if (details.facts && details.facts.length) {
-      var facts = doc.createElement("ul");
-      facts.className = "facts";
-      details.facts.forEach(function (f) {
-        var li = doc.createElement("li");
-        li.textContent = String(f);
-        facts.appendChild(li);
-      });
-      box.appendChild(facts);
-    }
-    (details.quotes || []).forEach(function (q) {
-      var quote = doc.createElement("blockquote");
-      quote.className = "quote";
-      var text = doc.createElement("p");
-      text.textContent = String(q.text);
-      quote.appendChild(text);
-      var href = httpsHref(q.url);
-      if (href) {
-        var a = doc.createElement("a");
-        a.href = href;
-        a.rel = "noopener noreferrer";
-        a.target = "_blank";
-        a.textContent = new URL(href).hostname;
-        quote.appendChild(a);
-      }
-      box.appendChild(quote);
+    var facts = doc.createElement("ul");
+    facts.className = "facts";
+    details.facts.forEach(function (f) {
+      var li = doc.createElement("li");
+      li.textContent = String(f);
+      facts.appendChild(li);
     });
-    return box.childNodes.length ? box : null;
+    box.appendChild(facts);
+    return box;
   }
 
   /**
@@ -844,9 +810,9 @@
     /** @type {RenderOpts} */
     var o = opts || {};
     var kc = kindFor(config, item.stratum);
-    if (kc.partition) { renderPartitionItem(doc, container, item, decided, config, kc, o); return; }
+    if (kc.layout === "partition") { renderPartitionItem(doc, container, item, decided, config, kc, o); return; }
     // validateReviewItem has held an item of a comparison kind to a ComparisonItem
-    if (layoutOf(kc) === "comparison") { renderComparisonItem(doc, container, /** @type {ComparisonItem} */ (item), decided, config, kc, o); return; }
+    if (kc.layout === "comparison") { renderComparisonItem(doc, container, /** @type {ComparisonItem} */ (item), decided, config, kc, o); return; }
     var pending = stepFor(kc, o.pending);
     var question = pending ? pending.followUp.question : kc.question;
     var choices = pending ? pending.followUp.choices : kc.choices;
@@ -1833,7 +1799,7 @@
       if (handlers.onPending) handlers.onPending(null);
       return "back";
     }
-    if (!/^[1-9]$/.test(key) || kc.partition) return null;
+    if (!/^[1-9]$/.test(key) || kc.layout === "partition") return null;
     var choices = pending ? pending.followUp.choices : kc.choices;
     var choice = choices[Number(key) - 1];
     if (!choice) return null;
@@ -1854,7 +1820,6 @@
     choiceLayout: choiceLayout,
     validateReviewConfig: validateReviewConfig,
     validateReviewItem: validateReviewItem,
-    layoutOf: layoutOf,
     kindLayout: kindLayout,
     currentFlags: currentFlags,
     proposedOf: proposedOf,
