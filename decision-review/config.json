@@ -16,60 +16,104 @@
     "kinds": {
       "project_site": {
         "question": "Is the EITI project this site?",
+        "layout": "comparison",
         "choices": [
           [
             "same_site",
-            "The same site: the project is the same mine or field as the site"
+            "The same site",
+            "the project is the same mine or field as the site"
           ],
           [
             "part_of",
-            "Part of the site: the project is one licence, block or phase of the mine or field the site covers"
+            "Part of the site",
+            "the project is one licence, block or phase of the mine or field the site covers"
           ],
           [
             "contains",
-            "The site is part of it: the site is one licence, block or phase of the mine or field the project covers"
+            "The site is part of it",
+            "the site is one licence, block or phase of the mine or field the project covers"
           ],
           [
             "parts_of_one",
-            "Parts of one site: the project and the site are different licences, blocks or phases of one mine or field, which neither covers whole"
+            "Parts of one site",
+            "the project and the site are different licences, blocks or phases of one mine or field, which neither covers whole"
           ],
           [
             "processing_for",
-            "Its output processed there: the site is a smelter, refinery or plant that processes the project's output"
+            "Its output processed there",
+            "the site is a smelter, refinery or plant that processes the project's output"
           ],
           [
             "no_match",
-            "Not of one mine or field"
+            "Not of one mine or field",
+            "the project and the site are not of one mine or field, and the site does not process the project's output"
           ]
-        ]
+        ],
+        "flags": [
+          [
+            "research_gap",
+            "Research gap: evidence that would settle this was missed"
+          ],
+          [
+            "quote_unsupported",
+            "A quote does not say what its claim says"
+          ]
+        ],
+        "unsure_choice": [
+          "Unsure",
+          "you cannot tell from what is shown; the question is closed as undecided and no one is asked again"
+        ],
+        "source_details": "Source details: how each record is known"
       },
       "site_membership": {
         "question": "Do these two records describe one site?",
+        "layout": "comparison",
         "choices": [
           [
             "same_site",
-            "The same site: the record describes the same mine or field as the other record"
+            "The same site",
+            "the record describes the same mine or field as the other record"
           ],
           [
             "part_of",
-            "Part of the other: the record describes one licence, block or phase of the mine or field the other record describes"
+            "Part of the other",
+            "the record describes one licence, block or phase of the mine or field the other record describes"
           ],
           [
             "contains",
-            "The other is part of it: the other record describes one licence, block or phase of the mine or field the record describes"
+            "The other is part of it",
+            "the other record describes one licence, block or phase of the mine or field the record describes"
           ],
           [
             "parts_of_one",
-            "Parts of one site: the record and the other record describe different licences, blocks or phases of one mine or field, which neither describes whole"
+            "Parts of one site",
+            "the record and the other record describe different licences, blocks or phases of one mine or field, which neither describes whole"
           ],
           [
             "no_match",
-            "Different mines or fields"
+            "Different mines or fields",
+            "the two records describe different mines or fields"
           ]
-        ]
+        ],
+        "flags": [
+          [
+            "research_gap",
+            "Research gap: evidence that would settle this was missed"
+          ],
+          [
+            "quote_unsupported",
+            "A quote does not say what its claim says"
+          ]
+        ],
+        "unsure_choice": [
+          "Unsure",
+          "you cannot tell from what is shown; the question is closed as undecided and no one is asked again"
+        ],
+        "source_details": "Source details: how each record is known"
       },
       "gem_name": {
         "question": "Is the company GEM names on the sites of its country this entity of GEM's ownership tracker, the same legal entity?",
+        "layout": "comparison",
         "choices": [
           [
             "match",
@@ -79,10 +123,26 @@
             "no_match",
             "No"
           ]
-        ]
+        ],
+        "flags": [
+          [
+            "research_gap",
+            "Research gap: evidence that would settle this was missed"
+          ],
+          [
+            "quote_unsupported",
+            "A quote does not say what its claim says"
+          ]
+        ],
+        "unsure_choice": [
+          "Unsure",
+          "you cannot tell from what is shown; the question is closed as undecided and no one is asked again"
+        ],
+        "source_details": "Source details: how each record is known"
       },
       "company_match": {
         "question": "Is the EITI company this GEM company, the same legal entity?",
+        "layout": "comparison",
         "choices": [
           [
             "match",
@@ -92,10 +152,26 @@
             "no_match",
             "No"
           ]
-        ]
+        ],
+        "flags": [
+          [
+            "research_gap",
+            "Research gap: evidence that would settle this was missed"
+          ],
+          [
+            "quote_unsupported",
+            "A quote does not say what its claim says"
+          ]
+        ],
+        "unsure_choice": [
+          "Unsure",
+          "you cannot tell from what is shown; the question is closed as undecided and no one is asked again"
+        ],
+        "source_details": "Source details: how each record is known"
       },
       "company_operation": {
         "question": "Did the company operate this site over the period?",
+        "layout": "comparison",
         "choices": [
           [
             "match",
@@ -105,10 +181,26 @@
             "no_match",
             "No"
           ]
-        ]
+        ],
+        "flags": [
+          [
+            "research_gap",
+            "Research gap: evidence that would settle this was missed"
+          ],
+          [
+            "quote_unsupported",
+            "A quote does not say what its claim says"
+          ]
+        ],
+        "unsure_choice": [
+          "Unsure",
+          "you cannot tell from what is shown; the question is closed as undecided and no one is asked again"
+        ],
+        "source_details": "Source details: how each record is known"
       },
       "company_completeness": {
         "question": "Are these sites all the company's operations in the country over the period?",
+        "layout": "comparison",
         "choices": [
           [
             "match",
@@ -118,7 +210,22 @@
             "no_match",
             "No"
           ]
-        ]
+        ],
+        "flags": [
+          [
+            "research_gap",
+            "Research gap: evidence that would settle this was missed"
+          ],
+          [
+            "quote_unsupported",
+            "A quote does not say what its claim says"
+          ]
+        ],
+        "unsure_choice": [
+          "Unsure",
+          "you cannot tell from what is shown; the question is closed as undecided and no one is asked again"
+        ],
+        "source_details": "Source details: how each record is known"
       }
     },
     "unsure": "unsure"
