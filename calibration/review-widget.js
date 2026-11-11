@@ -109,29 +109,36 @@
  *   `record` is the key of a subject or of an other record; `reason`, the sentence saying why verify
  *   refused it, is present exactly when it is refused
  * @typedef {{ id: string, statement: string, evidence: Citation[] }} Claim
+ * @typedef {{ claims: Claim[] } | { none: string }} Research - the research about the question: its
+ *   claims (one at least), or the publisher's sentence saying the section holds none
  * @typedef {{ record: string, label: string }} WeighedFact
- * @typedef {{ choice: (string|null), label: string, rationale: string, cited: string[], facts: WeighedFact[] }} OpusSaid
- * @typedef {{ choice: (string|null), label: string, probability: number, probabilities: [string, number][] }} JevSaid -
+ * @typedef {{ choice: string } | { unsettled: string }} Answer - a judge's answer: one of the kind's choice
+ *   values (never the unsure value), named on the card as the config names it, or the publisher's
+ *   sentence for an answer that found the evidence insufficient
+ * @typedef {{ answer: Answer, rationale: string, cited: string[], facts: WeighedFact[] }} OpusSaid
+ * @typedef {{ answer: Answer, probability: number, probabilities: [string, number][] }} JevSaid -
  *   Jev's answer, the probability it gave that answer, and its probabilities as [label, probability] pairs
  * @typedef {{ said: OpusSaid } | { missing: string }} OpusArm
  * @typedef {{ said: JevSaid } | { missing: string }} JevArm
- * @typedef {"same" | "doubted" | "differ" | "one"} Together
- * @typedef {{ by: "judges", together: Together, opus: OpusArm, jev: JevArm, proposed?: string }
+ * @typedef {"same" | "doubted" | "differ" | "one" | "off_pin"} Together - what the judges' answers are
+ *   together: both the same choice, one at least insufficient, two different choices, one judge
+ *   answering, or both answering with Jev's answer not counted
+ * @typedef {{ by: "judges", together: Together, opus: OpusArm, jev: JevArm }
  *   | { by: "rule", rule: string, proposed: string }
- *   | { by: "none" }} Proposal - who proposes the item's answer: the two judges (`proposed` only when they
- *   agree, Opus's choice), a rule (its sentence), or nothing
+ *   | { by: "none" }} Proposal - who proposes the item's answer: the two judges (their answer when they
+ *   are the same, read by proposedOf), a rule (its sentence and its answer), or nothing
  * @typedef {"loading" | "known" | "unknown"} SavedState - whether the reviewer's saved answers to the
  *   item are known: loading until they are read, unknown when they could not be
- * @typedef {{ item_id: string, stratum: string, country_iso3: string, subjects: Subject[],
- *   comparison: ConceptRow[], others: OtherRecord[], register: string[], claims: Claim[], proposal: Proposal,
- *   why: string, notices: string[] }} ComparisonItem - a comparison kind's item
- * @typedef {{ item_id: string, stratum: string, country_iso3: string, names?: string[],
+ * @typedef {{ item_id: string, stratum: string, subjects: Subject[], comparison: ConceptRow[],
+ *   others: OtherRecord[], register: string[], research: Research, proposal: Proposal, why: string,
+ *   notices: string[] }} ComparisonItem - a comparison kind's item; its subjects name their countries
+ * @typedef {{ item_id: string, stratum: string, country_iso3?: string, names?: string[],
  *   details?: ItemDetails, members?: ItemMember[], prior?: Partition, machine_verdict?: string,
  *   machine_detail?: (string|null), subjects?: Subject[], comparison?: ConceptRow[], others?: OtherRecord[],
- *   register?: string[], claims?: Claim[], proposal?: Proposal, why?: string, notices?: string[] }} ReviewItem -
- *   a names kind's item names its `names`; a partition kind's lists its `members` and the partition its
- *   review starts from (`prior`); a comparison kind's is a ComparisonItem; validateReviewItem holds an
- *   item to its kind
+ *   register?: string[], research?: Research, proposal?: Proposal, why?: string, notices?: string[] }} ReviewItem -
+ *   a names kind's item names its `names` and a partition kind's lists its `members` and the partition
+ *   its review starts from (`prior`), each with its `country_iso3`; a comparison kind's is a
+ *   ComparisonItem; validateReviewItem holds an item to its kind
  * @typedef {{ verdict: string, detail: (string|null), partition?: undefined, note?: string, flags?: string[] }} ChoiceDecided
  * @typedef {{ verdict: string, detail: null, partition: Partition, note?: string, flags?: undefined }} PartitionDecided
  * @typedef {ChoiceDecided | PartitionDecided} Decided
@@ -169,7 +176,7 @@
   // The closed sets a comparison item's values come from, which the card words one case each: what
   // the judges' answers are together (Proposal.together), the statuses verify gives a citation, and a
   // comparison row's group.
-  var TOGETHER = ["same", "doubted", "differ", "one"];
+  var TOGETHER = ["same", "doubted", "differ", "one", "off_pin"];
   var CITATION_STATUSES = ["verified", "refused"];
   var ROW_GROUPS = ["identity", "fact", "source"];
 
@@ -235,14 +242,23 @@
   }
 
   /**
-   * The choice a comparison item's proposal preselects: the value the judges agree on, or the rule's;
-   * null when nothing is proposed (the judges have no agreed answer, or nothing answered).
+   * The choice a comparison item's proposal preselects: the judges' when their answers are the same
+   * (Opus's choice, which is Jev's), or the rule's; null when nothing is proposed (the judges have no
+   * agreed answer, or nothing answered). validateReviewItem holds both judges to a choice under "same".
    * @param {ReviewItem} item @returns {string|null}
    */
   function proposedOf(item) {
     var p = item.proposal;
-    if (!p || p.by === "none") return null;
-    return p.proposed == null ? null : p.proposed;
+    if (!p) return null;
+    switch (p.by) {
+      case "rule": return p.proposed;
+      case "judges": {
+        if (p.together !== "same" || !("said" in p.opus)) return null;
+        var answer = p.opus.said.answer;
+        return "choice" in answer ? answer.choice : null;
+      }
+      default: return null;
+    }
   }
 
   /**
@@ -419,27 +435,28 @@
   }
 
   /**
-   * Check an item against the kind the config gives it: its item_id and country_iso3 are strings; a
-   * names kind's item names at least one name; a partition kind's lists two members or more with
-   * distinct non-empty ids and labels, and its `prior`, when present, is a partition of them; a
-   * comparison kind's is a ComparisonItem (checkComparisonItem). Only a comparison item carries a
-   * proposal. A page refuses a data set holding an item that fails, rather than show a card no answer
-   * fits.
+   * Check an item against the kind the config gives it: its item_id is a string; a comparison kind's
+   * item is a ComparisonItem (checkComparisonItem), which carries no country_iso3 (its subjects name
+   * their countries); a names or partition kind's carries its country_iso3 as a string, a names item
+   * at least one name, a partition item two members or more with distinct non-empty ids and labels and
+   * its `prior`, when present, a partition of them. Only a comparison item carries a proposal. A page
+   * refuses a data set holding an item that fails, rather than show a card no answer fits.
    * @param {unknown} item @param {ReviewConfig} config @returns {{ ok: true } | { ok: false, reason: string }}
    */
   function validateReviewItem(item, config) {
     if (!isObject(item)) return { ok: false, reason: "item must be an object" };
     var where = "item " + JSON.stringify(item.item_id);
-    if (typeof item.item_id !== "string" || typeof item.country_iso3 !== "string") return { ok: false, reason: where + ": item_id and country_iso3 must be strings" };
+    if (typeof item.item_id !== "string") return { ok: false, reason: where + ": item_id must be a string" };
     var stratum = item.stratum;
     var kc = typeof stratum === "string" && own(config.kinds, stratum) ? config.kinds[stratum] : undefined;
     if (!kc) return { ok: false, reason: where + ": the config defines no kind " + JSON.stringify(stratum) };
     var layout = layoutOf(kc);
-    if (layout !== "comparison" && item.proposal !== undefined) return { ok: false, reason: where + ": only a comparison item carries a proposal" };
     if (layout === "comparison") {
-      var bad = checkComparisonItem(item, kc, config.unsure);
+      var bad = checkComparisonItem(item, kc);
       return bad ? { ok: false, reason: where + ": " + bad } : { ok: true };
     }
+    if (typeof item.country_iso3 !== "string") return { ok: false, reason: where + ": country_iso3 must be a string" };
+    if (item.proposal !== undefined) return { ok: false, reason: where + ": only a comparison item carries a proposal" };
     if (layout === "names") {
       var names = item.names;
       var namesOk = isList(names) && names.length > 0 && names.every(function (n) { return typeof n === "string"; });
@@ -512,20 +529,34 @@
   function isProbability(v) { return typeof v === "number" && v >= 0 && v <= 1; }
 
   /**
-   * Check one judge's arm of a proposal: what it said, or the text saying why it said nothing. An
-   * answer carries its choice (one of `answers`, or null for an answer that is none) and its label;
-   * Opus's its rationale, the claims it cites and the facts it weighed (each a record key of `keys`);
-   * Jev's the probability it gave its answer and its probabilities as [label, probability] pairs.
-   * @param {string} where @param {unknown} arm @param {"opus"|"jev"} judge @param {string[]} answers
+   * Check a judge's answer: one of the kind's choice values (`values`, never the unsure value), or the
+   * publisher's non-empty sentence for an answer that found the evidence insufficient; nothing else.
+   * @param {string} where @param {unknown} answer @param {string[]} values @returns {string|null}
+   */
+  function checkAnswer(where, answer, values) {
+    if (!isObject(answer) || Object.keys(answer).length !== 1) return where + " must be { choice } or { unsettled }";
+    if ("choice" in answer) return typeof answer.choice === "string" && values.indexOf(answer.choice) !== -1 ? null : where + ".choice " + JSON.stringify(answer.choice) + " is no choice of the kind";
+    if ("unsettled" in answer) return nonEmpty(answer.unsettled) ? null : where + ".unsettled must be a non-empty sentence";
+    return where + " must be { choice } or { unsettled }";
+  }
+
+  /**
+   * Check one judge's arm of a proposal: what it said, or the text saying why it said nothing. What it
+   * said carries its answer (checkAnswer) and no label of its own, the card naming a choice as the
+   * config does; Opus's its rationale, the claims it cites and the facts it weighed (each a record key
+   * of `keys`); Jev's the probability it gave its answer and its probabilities as [label, probability]
+   * pairs.
+   * @param {string} where @param {unknown} arm @param {"opus"|"jev"} judge @param {string[]} values
    * @param {string[]} keys @returns {string|null}
    */
-  function checkJudge(where, arm, judge, answers, keys) {
+  function checkJudge(where, arm, judge, values, keys) {
     if (!isObject(arm)) return where + " must be an object";
     if (arm.said === undefined) return nonEmpty(arm.missing) ? null : where + " needs what it said or a missing text";
     var said = arm.said;
-    if (!isObject(said) || !(said.choice === null || (typeof said.choice === "string" && answers.indexOf(said.choice) !== -1)) || !nonEmpty(said.label)) {
-      return where + ".said needs a choice of the kind (or null) and a label";
-    }
+    if (!isObject(said)) return where + ".said must be an object";
+    if (said.label !== undefined || said.choice !== undefined) return where + ".said carries its answer, not a choice or a label of its own";
+    var bad = checkAnswer(where + ".said.answer", said.answer, values);
+    if (bad) return bad;
     if (judge === "jev") {
       var probs = said.probabilities;
       var pairsOk = isList(probs) && probs.length > 0 && probs.every(function (pr) {
@@ -547,33 +578,56 @@
   }
 
   /**
-   * Check a comparison item's proposal: the judges' (both answered, or exactly one under "one"; a
-   * `proposed` value exactly when they agree, and then Opus's choice), a rule's (its sentence and its
-   * proposed value), or none. A proposed value is one of the kind's choice values, never the unsure
-   * value: Enter accepts it, and an unsure answer closes its question for good.
-   * @param {unknown} p @param {string[]} values the kind's choice values @param {string} unsure
-   * @param {string[]} keys @returns {string|null}
+   * The answer of a judge's arm that checkJudge has held, or null when the judge gave none.
+   * @param {unknown} arm @returns {Answer|null}
    */
-  function checkProposal(p, values, unsure, keys) {
+  function heldAnswer(arm) {
+    return isObject(arm) && isObject(arm.said) ? /** @type {Answer} */ (arm.said.answer) : null;
+  }
+
+  /**
+   * Whether the judges' two answers fit what the proposal says they are together: "same", two equal
+   * choices; "differ", two unequal choices; "doubted", two answers, one at least insufficient; "one",
+   * exactly one answer; "off_pin", two answers of any kind. Null when they fit, else why not.
+   * @param {Together} together @param {Answer|null} opus @param {Answer|null} jev @returns {string|null}
+   */
+  function checkTogether(together, opus, jev) {
+    var both = opus != null && jev != null;
+    var opusChoice = opus != null && "choice" in opus ? opus.choice : null;
+    var jevChoice = jev != null && "choice" in jev ? jev.choice : null;
+    var choices = opusChoice != null && jevChoice != null;
+    var where = "proposal.together " + JSON.stringify(together);
+    switch (together) {
+      case "same": return choices && opusChoice === jevChoice ? null : where + " needs both judges answering one choice";
+      case "differ": return choices && opusChoice !== jevChoice ? null : where + " needs both judges answering different choices";
+      case "doubted": return both && !choices ? null : where + " needs both judges answering, one at least insufficient";
+      case "one": return (opus == null) !== (jev == null) ? null : where + " needs exactly one judge answering";
+      case "off_pin": return both ? null : where + " needs both judges answering";
+      default: throw new Error("no shape for together " + JSON.stringify(together));
+    }
+  }
+
+  /**
+   * Check a comparison item's proposal: the judges' (each arm checked, their answers fitting
+   * `together`, checkTogether; no proposed value, which proposedOf reads from their answers), a rule's
+   * (its sentence and its proposed value, one of the kind's choice values: Enter accepts it, and an
+   * unsure answer closes its question for good), or none.
+   * @param {unknown} p @param {string[]} values the kind's choice values @param {string[]} keys @returns {string|null}
+   */
+  function checkProposal(p, values, keys) {
     if (!isObject(p)) return "proposal must be an object";
-    var proposedOk = p.proposed === undefined || (typeof p.proposed === "string" && values.indexOf(p.proposed) !== -1);
-    if (!proposedOk) return "proposal.proposed " + JSON.stringify(p.proposed) + " is no choice of the kind";
     switch (p.by) {
       case "none":
         return p.proposed === undefined ? null : "a proposal by none proposes no value";
       case "rule":
-        return nonEmpty(p.rule) && p.proposed !== undefined ? null : "a rule's proposal names its rule and its proposed value";
+        if (!nonEmpty(p.rule) || p.proposed === undefined) return "a rule's proposal names its rule and its proposed value";
+        return typeof p.proposed === "string" && values.indexOf(p.proposed) !== -1 ? null : "proposal.proposed " + JSON.stringify(p.proposed) + " is no choice of the kind";
       case "judges": {
+        if (p.proposed !== undefined) return "the judges' proposal carries no proposed value: it is their answer when they are the same";
         if (typeof p.together !== "string" || TOGETHER.indexOf(p.together) === -1) return "proposal.together must be one of " + TOGETHER.join(", ");
-        var answers = values.concat([unsure]);
-        var bad = checkJudge("proposal.opus", p.opus, "opus", answers, keys) || checkJudge("proposal.jev", p.jev, "jev", answers, keys);
+        var bad = checkJudge("proposal.opus", p.opus, "opus", values, keys) || checkJudge("proposal.jev", p.jev, "jev", values, keys);
         if (bad) return bad;
-        var answered = [p.opus, p.jev].filter(function (a) { return isObject(a) && a.said !== undefined; }).length;
-        if (p.together === "one" ? answered !== 1 : answered !== 2) return "proposal.together " + JSON.stringify(p.together) + " does not fit " + answered + " judge(s) answering";
-        if ((p.together === "same") !== (p.proposed !== undefined)) return "the judges' proposal names a proposed value exactly when they agree";
-        var opus = /** @type {{ said: { choice: unknown } }} */ (p.opus); // checkJudge has held it; both answered on "same"
-        if (p.together === "same" && p.proposed !== opus.said.choice) return "the judges' proposed value is Opus's choice";
-        return null;
+        return checkTogether(/** @type {Together} */ (p.together), heldAnswer(p.opus), heldAnswer(p.jev));
       }
       default:
         return "proposal.by must be judges, rule or none";
@@ -581,14 +635,40 @@
   }
 
   /**
+   * Check a comparison item's research: its claims (one at least, with distinct ids, each citation
+   * naming the item's records, `keys`), or the publisher's sentence saying it holds none.
+   * @param {unknown} research @param {string[]} keys @returns {string|null}
+   */
+  function checkResearch(research, keys) {
+    if (!isObject(research) || Object.keys(research).length !== 1) return "research must be { claims } or { none }";
+    if ("none" in research) return nonEmpty(research.none) ? null : "research.none must be a non-empty sentence";
+    var claims = research.claims;
+    if (!isList(claims) || !claims.length) return "research.claims must be a non-empty list";
+    /** @type {string[]} */
+    var ids = [];
+    for (var k = 0; k < claims.length; k++) {
+      var claim = claims[k];
+      if (!isObject(claim) || !nonEmpty(claim.id) || typeof claim.statement !== "string" || !isList(claim.evidence)) return "claim " + (k + 1) + " needs an id, a statement and its evidence";
+      if (ids.indexOf(claim.id) !== -1) return "claim id " + JSON.stringify(claim.id) + " appears twice";
+      ids.push(claim.id);
+      for (var e = 0; e < claim.evidence.length; e++) {
+        var ebad = checkCitation("claim " + JSON.stringify(claim.id) + " citation " + (e + 1), claim.evidence[e], keys);
+        if (ebad) return ebad;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Check a comparison item: one subject or more, each named, with distinct keys and the countries it
    * names; a comparison whose every row has a group and one cell per subject; other records named,
-   * with keys of their own; claims with distinct ids whose citations name the item's records; a
-   * proposal (checkProposal); its why, notices and register. A comparison item has no names.
-   * @param {Record<string, unknown>} item @param {KindConfig} kc @param {string} unsure @returns {string|null}
+   * with keys of their own; its research (checkResearch); a proposal (checkProposal); its why, notices
+   * and register. A comparison item has no names and no country_iso3.
+   * @param {Record<string, unknown>} item @param {KindConfig} kc @returns {string|null}
    */
-  function checkComparisonItem(item, kc, unsure) {
+  function checkComparisonItem(item, kc) {
     if (item.names !== undefined) return "a comparison item has subjects, not names";
+    if (item.country_iso3 !== undefined) return "a comparison item has subjects naming their countries, not a country_iso3";
     var subjects = item.subjects;
     if (!isList(subjects) || !subjects.length) return "subjects must be a non-empty list";
     /** @type {string[]} */
@@ -627,25 +707,13 @@
         if (cbad) return cbad;
       }
     }
-    var claims = item.claims;
-    if (!isList(claims)) return "claims must be a list";
-    /** @type {string[]} */
-    var ids = [];
-    for (var k = 0; k < claims.length; k++) {
-      var claim = claims[k];
-      if (!isObject(claim) || !nonEmpty(claim.id) || typeof claim.statement !== "string" || !isList(claim.evidence)) return "claim " + (k + 1) + " needs an id, a statement and its evidence";
-      if (ids.indexOf(claim.id) !== -1) return "claim id " + JSON.stringify(claim.id) + " appears twice";
-      ids.push(claim.id);
-      for (var e = 0; e < claim.evidence.length; e++) {
-        var ebad = checkCitation("claim " + JSON.stringify(claim.id) + " citation " + (e + 1), claim.evidence[e], keys);
-        if (ebad) return ebad;
-      }
-    }
+    var rbad = checkResearch(item.research, keys);
+    if (rbad) return rbad;
     if (typeof item.why !== "string") return "why must be a string";
     if (!isStrings(item.notices)) return "notices must be a list of strings";
     if (!isStrings(item.register)) return "register must be a list of strings";
     var values = (kc.choices || []).map(function (ch) { return ch[0]; });
-    return checkProposal(item.proposal, values, unsure, keys);
+    return checkProposal(item.proposal, values, keys);
   }
 
   /**
@@ -980,6 +1048,16 @@
   }
 
   /**
+   * A judge's answer as the card words it: a choice as the kind's config names it, an insufficient
+   * answer as the publisher's sentence. validateReviewItem holds a judge's choice to the kind's choices.
+   * @param {KindConfig} kc @param {Answer} answer @returns {string}
+   */
+  function answerText(kc, answer) {
+    if ("unsettled" in answer) return answer.unsettled;
+    return /** @type {string} */ (choiceName(kc, answer.choice));
+  }
+
+  /**
    * The line the card's status slot shows for a committed answer: saved, saved as unsure, or saved as a
    * correction of the proposal. Empty for an undecided item. The shell writes the same line when it
    * confirms a commit on the card, before the card advances.
@@ -1053,14 +1131,15 @@
   }
 
   /**
-   * One judge's position, as a box: its answer (or why it gave none), and Jev's probabilities.
-   * @param {Document} doc @param {string} name @param {OpusArm|JevArm} arm @returns {HTMLElement}
+   * One judge's position, as a box: its answer (answerText) or why it gave none, and Jev's
+   * probabilities.
+   * @param {Document} doc @param {KindConfig} kc @param {string} name @param {OpusArm|JevArm} arm @returns {HTMLElement}
    */
-  function judgeBox(doc, name, arm) {
+  function judgeBox(doc, kc, name, arm) {
     var box = el(doc, "div", "cmp-judge");
     box.appendChild(el(doc, "div", "cmp-judge-name", name));
     if (!("said" in arm)) { box.appendChild(el(doc, "div", "cmp-judge-missing", arm.missing)); return box; }
-    box.appendChild(el(doc, "div", "cmp-judge-answer", arm.said.label));
+    box.appendChild(el(doc, "div", "cmp-judge-answer", answerText(kc, arm.said.answer)));
     if ("probabilities" in arm.said) {
       var row = el(doc, "div", "cmp-probs");
       arm.said.probabilities.forEach(function (pr) { row.appendChild(el(doc, "span", "cmp-prob", pr[0] + " " + percent(pr[1]))); });
@@ -1080,6 +1159,7 @@
       case "doubted": return "A judge found the evidence insufficient";
       case "differ": return "The judges disagree";
       case "one": return "One judge answered";
+      case "off_pin": return "Jev's answer is not counted";
       default: throw new Error("no sentence for together " + JSON.stringify(together));
     }
   }
@@ -1106,13 +1186,13 @@
         if (sentence == null && proposedName != null && "said" in jev) {
           head.appendChild(el(doc, "span", "cmp-prop-answer", proposedName));
           head.appendChild(el(doc, "span", "cmp-prop-by", "Both judges agree"));
-          head.appendChild(el(doc, "span", "cmp-prob", "Jev: " + jev.said.label + ", " + percent(jev.said.probability)));
+          head.appendChild(el(doc, "span", "cmp-prob", "Jev: " + answerText(kc, jev.said.answer) + ", " + percent(jev.said.probability)));
         } else {
           head.appendChild(el(doc, "span", "cmp-prop-answer", "No agreed answer"));
           head.appendChild(el(doc, "span", "cmp-prop-by", sentence || ""));
           var judges = el(doc, "div", "cmp-judges");
-          judges.appendChild(judgeBox(doc, "Opus", opus));
-          judges.appendChild(judgeBox(doc, "Jev", jev));
+          judges.appendChild(judgeBox(doc, kc, "Opus", opus));
+          judges.appendChild(judgeBox(doc, kc, "Jev", jev));
           card.appendChild(judges);
         }
         if ("said" in opus) {
@@ -1315,32 +1395,34 @@
   }
 
   /**
-   * The research: each claim with its citations, then the other records it cites and the site register.
-   * Fills `claimEls` with each claim's element by id, so the rationale's citations can reach them.
+   * The research: each claim with its citations, or the publisher's sentence saying it holds none; then
+   * the other records it cites and the site register. Fills `claimEls` with each claim's element by id,
+   * so the rationale's citations can reach them.
    * @param {Document} doc @param {ComparisonItem} item @param {Record<string, HTMLElement>} claimEls @returns {HTMLElement}
    */
   function renderResearch(doc, item, claimEls) {
     var card = el(doc, "section", "card cmp-research");
     card.appendChild(el(doc, "p", "cmp-eyebrow", "The research"));
-    if (!item.claims.length) {
-      card.appendChild(el(doc, "p", "cmp-help", "No research reached the judges for this question."));
+    var research = item.research;
+    if ("none" in research) {
+      card.appendChild(el(doc, "p", "cmp-help", research.none));
     } else {
       card.appendChild(el(doc, "p", "cmp-help", "Each claim the researcher made about these records, with its citations as the tool checked them: ✓ found in the stored page or source, ✗ refused."));
+      research.claims.forEach(function (c) {
+        var box = el(doc, "div", "cmp-claim");
+        box.id = "claim-" + c.id;
+        box.setAttribute("tabindex", "-1");
+        var p = el(doc, "p");
+        p.appendChild(el(doc, "span", "cmp-cid", c.id));
+        p.appendChild(doc.createTextNode(c.statement));
+        box.appendChild(p);
+        var list = el(doc, "ul", "cmp-ev");
+        c.evidence.forEach(function (e) { list.appendChild(renderCitation(doc, item, e)); });
+        box.appendChild(list);
+        card.appendChild(box);
+        claimEls[c.id] = box;
+      });
     }
-    item.claims.forEach(function (c) {
-      var box = el(doc, "div", "cmp-claim");
-      box.id = "claim-" + c.id;
-      box.setAttribute("tabindex", "-1");
-      var p = el(doc, "p");
-      p.appendChild(el(doc, "span", "cmp-cid", c.id));
-      p.appendChild(doc.createTextNode(c.statement));
-      box.appendChild(p);
-      var list = el(doc, "ul", "cmp-ev");
-      c.evidence.forEach(function (e) { list.appendChild(renderCitation(doc, item, e)); });
-      box.appendChild(list);
-      card.appendChild(box);
-      claimEls[c.id] = box;
-    });
     if (item.others.length) {
       card.appendChild(el(doc, "p", "cmp-eyebrow cmp-others-head", "Other records the research cited"));
       card.appendChild(el(doc, "p", "cmp-help cmp-others-help", "The researcher checked this question against these records too: a claim placing the project at one of them bears on this question."));
